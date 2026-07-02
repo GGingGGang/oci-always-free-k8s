@@ -251,15 +251,18 @@ pipeline {
 
 - **`welcome-config`** — system message ("Source of truth = git").
 - **`env-config`** — `globalNodeProperties` 로 `GH_ORG` 주입 (`containerEnv` 의 동명 env 를 JCasC `${GH_ORG}` 치환으로 받음). Jenkinsfile/seed 가 GHCR 경로·레포 URL 을 이 변수로 구성 → org 이전 시 한 곳만 변경. (도메인은 변수화 안 함 — `jenkinsUrl` 등에 이미 직접 박혀 공개값)
-- **`credentials-config`** — `github-token` (usernamePassword, scope GLOBAL). 비밀번호는 `${GIT_PAT}` 치환 — `containerEnv` 의 `GIT_PAT` (Secret `jenkins-git-pat` key `token`) 에서 주입. 용도: Jenkins 가 앱 레포 `deploy` 매니페스트에 image tag 를 commit/push (manifest bump). **credential 실값은 git 에 평문 ❌** — JCasC 는 `${GIT_PAT}` placeholder 만 보유, 실값은 Secret.
+- **`credentials-config`** — `github-token` (usernamePassword, scope GLOBAL). 비밀번호는 `${GIT_PAT}` 치환 — `containerEnv` 의 `GIT_PAT` (Secret `jenkins-git-pat` key `token`) 에서 주입. 용도: Jenkins 가 `k8s-gitops` 의 `manifests/<svc>` 에 image tag 를 bump (shared library `deployBump`). **credential 실값은 git 에 평문 ❌** — JCasC 는 `${GIT_PAT}` placeholder 만 보유, 실값은 Secret.
 - **`library-config`** — Global Pipeline Library `shared` 등록 (`unclassified.globalLibraries`). `jenkins-shared-library` 레포를 modernSCM git retriever 로 로드, `defaultVersion: main`. **`implicit: false` 라 자동 로드 ❌** — Jenkinsfile 이 `@Library('shared') _` 로 명시 호출해야 적재. 공용 step(예: `kanikoBuild`)을 앱 레포 3곳이 중복 보유하지 않게 하는 단일 출처.
-- **`jobs-config`** — `job-dsl` 로 잡을 선언적 생성. UI 클릭 잡 생성은 emptyDir 라 재기동 시 증발하므로 무효. 현재 `core` `pipelineJob` 1개:
-  - `cpsScm` 가 앱 레포 git + `scriptPath('Jenkinsfile')` (Jenkinsfile 은 앱 레포 루트 소유)
-  - `properties { githubProjectUrl(...) }` + `triggers { githubPush() }` — `github` plugin 이 webhook 페이로드의 레포 URL 을 잡의 SCM URL 과 매칭해 트리거. (`triggers is deprecated` 경고는 무해)
+- **`jobs-config`** — `job-dsl` 로 잡을 선언적 생성. UI 클릭 잡 생성은 emptyDir 라 재기동 시 증발하므로 무효. `organizationFolder('services')` 1개가 레포를 **자동 발견** — 잡을 명세하지 않고 발견 규칙만 명세:
+  - `repoOwner('${GH_ORG}')` + `sourceRegexFilter('svc-.*')` — 소유자의 레포 중 `svc-` prefix 만 골라 각각 multibranch 파이프라인 생성. 인벤토리를 git 에 손으로 나열하지 않고 GitHub 스캔으로 재도출 → emptyDir(stateless) 철학과 정합(job 목록조차 상태로 안 들고 boot 마다 derive).
+  - `workflowMultiBranchProjectFactory { scriptPath('Jenkinsfile') }` — 발견된 레포 루트 `Jenkinsfile` 로 파이프라인 정의 (정의는 앱 레포 소유).
+  - `gitHubBranchDiscovery(strategyId 1)` 브랜치만 발견(PR 미포함) · `periodicFolderTrigger('1d')` 웹훅 미설정 시 하루 1회 재스캔 폴백 · `orphanedItemStrategy` 사라진 브랜치/레포 잡 자동 정리.
 
-> 자격증명·라이브러리·잡이 모두 `${GH_ORG}` 로 레포 URL 을 구성 → org 이전 시 `containerEnv` 한 곳만 변경.
+> 앱 추가 계약: 레포명 `svc-<service>` (예: `svc-core`, `svc-auth`) + 루트 `Jenkinsfile`. 이름 규칙만 지키면 다음 스캔에 자동 편입 — `jobs-config` · 인프라 무수정. `svc-` prefix 가 인프라/라이브러리 레포(`oci-terraform`/`jenkins-shared-library`/`k8s-gitops`)를 멤버십에서 자동 배제. 타입(front/back/batch)은 멤버십 regex 에 안 넣고 각 레포 Jenkinsfile(shared library 호출)이 처리 — 타입 늘어도 regex 무수정.
 
-> 트리거 등록 방식: 현재는 GitHub repo settings 에서 webhook **수동 등록** + `githubPush()`. `manageHooks: true`(Jenkins 가 레포에 훅 자동 생성)는 multibranch/organizationFolder 잡이라야 동작 — 다중 레포 일반화 시점에 전환. 종착지는 GitHub App.
+> 자격증명·라이브러리·발견이 모두 `${GH_ORG}` 로 소유자를 구성 → org 이전 시 `containerEnv` 한 곳만 변경.
+
+> 트리거 등록 방식: `organizationFolder` 는 발견한 레포에 훅 자동 등록 가능 — `github-token` 에 `admin:repo_hook` scope 면 스캔 시 레포별 webhook 생성, 없으면 `periodicFolderTrigger('1d')` 폴백(최대 하루 지연). 개인 계정은 계정-레벨 훅이 없어 레포별 훅 or 폴백, 진짜 org 는 org-레벨 단일 훅 가능. 종착지는 GitHub App.
 
 GHCR 레포 경로는 **소문자 강제** — GitHub 계정명에 대문자가 있으면 Jenkinsfile 에서 `${env.GH_ORG.toLowerCase()}` 로 이미지 경로 구성(git clone URL 은 원본 케이싱 유지 가능).
 
@@ -282,7 +285,7 @@ controller는 빌드 안 함. agent Pod만 빌드 → controller는 *오케스�
 - 빌드 Pod (`kaniko-builder` SA) 는 *GHCR push token* 만 가짐 — Pod 만들 권한 ❌
 - 둘 다 `app` NS 권한 0건 — 배포는 git commit (manifest 패턴) 으로만
 
-manifest commit 패턴: Jenkins 는 *k8s API 직접 호출 ❌*, *git push (앱 레포 deploy/values.yaml 에 image tag commit)* 만. ArgoCD 가 git diff 감지해서 `app` NS 에 적용 → *권한 경계가 git 레벨에서 강제됨*.
+manifest commit 패턴: Jenkins 는 *k8s API 직접 호출 ❌*, *git push (`k8s-gitops` `manifests/<svc>` 에 image tag bump — shared library `deployBump`)* 만. ArgoCD 가 git diff 감지해서 `app` NS 에 적용 → *권한 경계가 git 레벨에서 강제됨*.
 
 ### HTTPRoute — admin UI 는 parked, webhook 만 public
 

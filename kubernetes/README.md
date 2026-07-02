@@ -39,13 +39,13 @@ helm install + `kubectl apply` 수동 (멱등). 도메인은 git 박힘, secret 
 
 ## 앱 매니페스트 위치
 
-앱 **매니페스트**(deployment/service/httproute/kustomization)는 본 레포에 두지 않음 — 서비스별 별도 레포(코드 + `deploy/k8s` 동거). 앱 레포를 가리키는 ArgoCD **Application CR**(포인터)도 본 레포가 아니라 전용 GitOps 레포(`k8s-gitops`)가 보유. 즉 *무엇을 배포할지의 선언(Application)* 은 GitOps 레포, *어떻게 생긴지의 정의(매니페스트)* 는 앱 레포, 본 레포는 **인프라/플랫폼만**.
+앱 **매니페스트**(deployment/service/httproute/kustomization)는 본 레포에 두지 않음 — 전용 GitOps 레포(`k8s-gitops`)의 `manifests/<svc>` 가 보유. ArgoCD **Application CR**(포인터)도 `k8s-gitops` 가 보유하며 source 가 `k8s-gitops/manifests/<svc>` 를 가리킴. 즉 *무엇을·어떻게 배포할지(Application + 매니페스트)* 는 `k8s-gitops`, **앱 레포는 코드만**, 본 레포는 **인프라/플랫폼만**.
 
 사유: ArgoCD 공식 권장 *config vs source code 분리* + 인프라/앱 권한 경계 + commit log 오염 방지.
 
-> 단일 레포(앱 코드 + `deploy/`) vs deploy 전용 레포 분리는 미결. 현재는 단일 레포(앱 레포 `deploy/k8s`)를 ArgoCD 가 watch. Jenkins 이미지 태그 bump 도입 시 루프가드(`[ci skip]` + path filter) 필요 여부가 이 결정에 달림.
+> 결정: deploy 전용 레포 분리 — 매니페스트를 `k8s-gitops/manifests/<svc>` 로 이전. Jenkins 는 앱 main 이 아니라 `k8s-gitops` 에 bump(shared library `deployBump`) → 앱 레포 main 무오염, `k8s-gitops` 는 org folder(`svc-.*`) 밖이라 빌드 루프 없음(`[ci skip]` 불필요). `core` 적용 완료, `batch`/`auth` 는 매니페스트 정리 후 동일 이전.
 
 ## 예정 추가
 
 - `platform/` — argocd, jenkins, openbao, monitoring, 데이터 계층(redis/kafka, `data` NS) 도입 완료. 관측 후속(Loki / Alloy / Tempo / Kiali) 예정
-- 앱 레이어(app-of-apps)는 전용 GitOps 레포(`k8s-gitops`)로 분리 — `core` Application 도입 완료. 후속 `batch`/`login` 추가 + east-west 메시(NetworkPolicy/AuthorizationPolicy)
+- 앱 레이어(app-of-apps)는 전용 GitOps 레포(`k8s-gitops`)로 분리 — `core` Application + 매니페스트 이전 완료. 후속 `batch`/`auth` 동일 이전 + east-west 메시(NetworkPolicy/AuthorizationPolicy)

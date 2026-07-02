@@ -158,24 +158,37 @@ controller:
       jobs-config: |
         jobs:
           - script: |
-              pipelineJob('core') {
-                properties {
-                  githubProjectUrl('https://github.com/${GH_ORG}/k8s-test-core-server/')
-                }
-                triggers {
-                  githubPush()
-                }
-                definition {
-                  cpsScm {
-                    scm {
-                      git {
-                        remote {
-                          url('https://github.com/${GH_ORG}/k8s-test-core-server.git')
-                        }
-                        branch('*/main')
+              organizationFolder('services') {
+                description('Auto-discovered MSA pipelines (svc-*)')
+                organizations {
+                  github {
+                    repoOwner('${GH_ORG}')
+                    apiUri('https://api.github.com')
+                    credentialsId('github-token')
+                    traits {
+                      gitHubBranchDiscovery {
+                        strategyId(1)
+                      }
+                      sourceRegexFilter {
+                        regex('svc-.*')
                       }
                     }
+                  }
+                }
+                projectFactories {
+                  workflowMultiBranchProjectFactory {
                     scriptPath('Jenkinsfile')
+                  }
+                }
+                orphanedItemStrategy {
+                  discardOldItems {
+                    daysToKeep(-1)
+                    numToKeep(-1)
+                  }
+                }
+                triggers {
+                  periodicFolderTrigger {
+                    interval('1d')
                   }
                 }
               }

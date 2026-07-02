@@ -55,7 +55,7 @@ admin UI(argocd/jenkins/grafana) HTTPRoute는 `public-gateway`의 `https-wildcar
 ```
 Jenkins (Kaniko) ──build──► GHCR
        │
-       └──commit image tag──► 앱 레포 deploy/values.yaml
+       └──image tag bump──► k8s-gitops manifests/<svc>/kustomization.yaml
                                       │
                               ArgoCD ─sync─► app NS
 ```
