@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: __SVC__
+resources:
+  - deployment.yaml
+  - service.yaml
+  - httproute.yaml
+images:
+  - name: __SVC__
+    newName: ghcr.io/__ORGLC__/svc-__SVC__
+    newTag: latest

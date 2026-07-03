@@ -1,0 +1,6 @@
+.git
+.claude
+*.md
+deploy/
+test/
+db/

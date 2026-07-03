@@ -1,0 +1,17 @@
+# build output
+/server
+/server.exe
+*.exe
+
+# test artifacts
+*.test
+*.out
+coverage.html
+
+# go workspace
+go.work
+go.work.sum
+
+# private docs
+PLAN.md
+CLAUDE.md
