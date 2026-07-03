@@ -138,8 +138,21 @@ argocd/
     ├── istio-base/istiod/istio-cni/ztunnel.yaml  (helm ×4) + istio-gateway.yaml (raw: Gateway/redirect)
     ├── kps.yaml                 (helm) + monitoring-httproute.yaml (raw)
     ├── jenkins.yaml             (helm) + jenkins-rbac.yaml / jenkins-httproute.yaml (raw)
-    └── argocd.yaml              (helm, self-manage) + argocd-httproute.yaml (raw)
+    ├── argocd.yaml              (helm, self-manage) + argocd-httproute.yaml (raw)
+    └── app-layer.yaml           앱 레이어 진입 포인터 → k8s-gitops/argocd
 ```
+
+### 인프라 → 앱 레이어 체인
+
+`app-layer.yaml` 은 `platform-root` 가 관리하는 자식 Application(`app-layer-root`) 로, 앱 레이어 GitOps 레포(`k8s-gitops`)의 `argocd/` 에서 `project.yaml`(AppProject `apps`) + `root.yaml`(app-of-apps `apps-root`) 만 sync 한다. 이후 `apps-root` 가 `k8s-gitops/argocd/apps/` 의 서비스 Application(core/batch/login) 을 관리 — 앱 매니페스트 정의는 전부 `k8s-gitops` 소유, 본 레포엔 진입 포인터 1개만.
+
+```
+platform-root (본 레포, 인프라)
+ └── app-layer-root ──► k8s-gitops/argocd  (project.yaml + root.yaml)
+        └── apps-root ──► k8s-gitops/argocd/apps  ──► core / batch / login
+```
+
+포인터 자신(`app-layer-root`)은 `apps` AppProject 를 *정의*하는 `project.yaml` 을 배포하므로 `apps` 프로젝트에 속할 수 없다(순환) → `project: platform`. 그래서 `project.yaml` 의 `sourceRepos` 에 `k8s-gitops.git` 을 추가해 두었다.
 
 ### 핵심 원칙
 
@@ -174,7 +187,7 @@ adopt 정상 판정: diff 가 `app.kubernetes.io/instance` 라벨 + `argocd.argo
 | 2 | external-dns, metrics-server, istiod, istio-cni, ztunnel |
 | 3 | cert-manager-resources, kps, jenkins-rbac |
 | 4 | istio-gateway, jenkins, argocd (self) |
-| 5 | jenkins-httproute, argocd-httproute, monitoring-httproute |
+| 5 | jenkins-httproute, argocd-httproute, monitoring-httproute, app-layer-root |
 
 `argocd` 자기 관리(self-manage)는 잘못 sync 하면 자기 손을 자르므로 wave 4 + **수동 sync 전용**. 하드닝 turn 에서도 selfHeal 활성은 마지막.
 

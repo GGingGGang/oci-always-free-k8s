@@ -7,6 +7,7 @@ spec:
   description: Self-managed platform infra layer
   sourceRepos:
     - https://github.com/GGingGGang/oci-always-free-k8s.git
+    - https://github.com/GGingGGang/k8s-gitops.git
     - https://charts.jetstack.io
     - https://kubernetes-sigs.github.io/external-dns/
     - https://kubernetes-sigs.github.io/metrics-server/
