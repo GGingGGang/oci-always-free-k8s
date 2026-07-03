@@ -7,6 +7,20 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 > **Free Tier(무료 체험)가 아닙니다.**
 > Free Tier는 30일 한정 크레딧입니다. 본 프로젝트는 PAYG 계정에 영구 포함되는 Always Free 리소스만 사용하므로 정상 사용 시 **과금 0원**.
 
+## 연결된 레포
+
+본 레포는 진입점. 앱 코드·GitOps 상태·CI 도구는 별도 레포에 있다:
+
+| 레포 | 역할 | 상태 |
+|------|------|------|
+| **oci-terraform** (본 레포) | OCI Terraform + Kubernetes 인프라 (VCN/OKE, 플랫폼, 부트스트랩) | 진행 중 |
+| [k8s-gitops](https://github.com/GGingGGang/k8s-gitops) | 앱 레이어 GitOps — Application CR + 매니페스트 (`manifests/<svc>`) | `core` 적용 완료, `batch`/`auth` 예정 |
+| [app-templates](https://github.com/GGingGGang/app-templates) | 서비스 씨앗 (sed 토큰 치환) → 새 `svc-*` 레포 + `k8s-gitops` | `go-app` 완료, `java-app` 예정 |
+| [jenkins-shared-library](https://github.com/GGingGGang/jenkins-shared-library) | Jenkins Global Pipeline Library (`kanikoBuild`, `deployBump`) | 사용 중 |
+| [svc-core](https://github.com/GGingGGang/svc-core) | 일정 도메인 API (Go/chi) | CI/CD 완주 검증됨, 도메인 로직 진행 중 |
+| svc-auth | 인증/세션/토큰 (Node.js/Fastify) | 부트스트랩 단계 |
+| svc-batch | 리마인더/Kafka consumer (Java/Spring Batch) | 부트스트랩 단계 |
+
 ## 스택
 
 | 계층 | 컴포넌트 | 상태 |
@@ -112,7 +126,6 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 │   │   ├── redis/              # MSA 캐시 (ephemeral, cache-aside)
 │   │   ├── kafka/              # MSA 이벤트 백본 (Strimzi, KRaft, ephemeral)
 │   │   └── README.md
-│   ├── templates/              # 서비스 씨앗 (sed 토큰 치환) → svc-* 레포 + k8s-gitops
 │   ├── test/                   # 일회성 검증
 │   └── README.md
 └── docs/
@@ -121,7 +134,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
     └── summary-kr.md           # Always Free 카탈로그 (KR)
 ```
 
-앱 레이어 Application CR + 매니페스트는 전용 GitOps 레포(`k8s-gitops`)가 보유 — 본 인프라 레포에는 없음. Quick Start §5 참조.
+앱 레이어 Application CR + 매니페스트는 전용 GitOps 레포(`k8s-gitops`)가, 서비스 씨앗(sed 토큰 치환 → 새 `svc-*` 레포 + `k8s-gitops`)은 `app-templates` 레포가 보유 — 둘 다 본 인프라 레포에는 없음. Quick Start §5 참조.
 
 ## Quick Start
 

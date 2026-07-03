@@ -7,6 +7,20 @@ A Kubernetes platform engineered within **Always Free** constraints (4 OCPU / 24
 > **Not Free Tier.**
 > Free Tier is a 30-day credit trial. This project uses Always Free resources that remain free indefinitely on a PAYG account — normal usage incurs **no charges**.
 
+## Related Repos
+
+This repo is the entry point. Application code, GitOps state, and CI tooling live in separate repos:
+
+| Repo | Role | Status |
+|------|------|--------|
+| **oci-terraform** (this repo) | OCI Terraform + Kubernetes infra (VCN/OKE, platform, bootstrap) | in progress |
+| [k8s-gitops](https://github.com/GGingGGang/k8s-gitops) | App layer GitOps — Application CRs + manifests (`manifests/<svc>`) | `core` live, `batch`/`auth` planned |
+| [app-templates](https://github.com/GGingGGang/app-templates) | Service scaffolds (sed-token stamped) → new `svc-*` repo + `k8s-gitops` | `go-app` done, `java-app` planned |
+| [jenkins-shared-library](https://github.com/GGingGGang/jenkins-shared-library) | Jenkins Global Pipeline Library (`kanikoBuild`, `deployBump`) | in use |
+| [svc-core](https://github.com/GGingGGang/svc-core) | Schedule domain API (Go/chi) | CI/CD verified end-to-end, domain logic in progress |
+| svc-auth | Auth/session/token (Node.js/Fastify) | bootstrap |
+| svc-batch | Reminder/Kafka consumer (Java/Spring Batch) | bootstrap |
+
 ## Stack
 
 | Layer | Components | Status |
@@ -112,7 +126,6 @@ Full catalog: [`docs/summary.md`](./docs/summary.md).
 │   │   ├── redis/              # MSA cache (ephemeral, cache-aside)
 │   │   ├── kafka/              # MSA event backbone (Strimzi, KRaft, ephemeral)
 │   │   └── README.md
-│   ├── templates/              # Service scaffolds (sed-token stamped) → svc-* repo + k8s-gitops
 │   ├── test/                   # One-shot validation
 │   └── README.md
 └── docs/
@@ -121,7 +134,7 @@ Full catalog: [`docs/summary.md`](./docs/summary.md).
     └── summary-kr.md           # Always Free catalog (KR)
 ```
 
-App layer Application CRs + manifests live in a dedicated GitOps repo (`k8s-gitops`), not in this infra repo — see Quick Start §5.
+App layer Application CRs + manifests live in a dedicated GitOps repo (`k8s-gitops`); service scaffolds (sed-token stamped, → new `svc-*` repo + `k8s-gitops`) live in `app-templates` — neither is in this infra repo. See Quick Start §5.
 
 ## Quick Start
 
