@@ -49,14 +49,14 @@ cp -r _generated/gitops-<SVC>/manifests/<SVC>       <k8s-gitops>/manifests/
 cp -r _generated/gitops-<SVC>/argocd/apps/<SVC>.yaml <k8s-gitops>/argocd/apps/
 ```
 
-네임스페이스 배선:
+네임스페이스 배선 — **`sed-template.sh` 산출물에 없음, 아래 2곳은 직접 수동 편집**:
 
 ```bash
 # 네임스페이스 <SVC> 를 플랫폼 네임스페이스 매니페스트에 추가
-# AppProject 'apps' 의 spec.destinations 에 namespace <SVC> 추가
+# k8s-gitops/argocd/project.yaml 의 spec.destinations 에 namespace <SVC> 직접 추가 (편집)
 ```
 
-커밋:
+커밋 — `manifests/<SVC>`·`apps/<SVC>.yaml` 은 스탬프 산출물, `project.yaml` 은 위에서 직접 편집한 결과:
 
 ```bash
 cd <k8s-gitops>

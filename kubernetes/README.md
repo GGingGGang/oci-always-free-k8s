@@ -33,9 +33,7 @@ kubernetes/
 
 ## 적용 모델
 
-helm install + `kubectl apply` 수동 (멱등). 도메인은 git 박힘, secret 성격 값만 sed/Vault 경유. ArgoCD 는 현재 helm release 로 유지하되, 본 레포(인프라)는 self-managed Application + 기존 helm release adopt 로 ArgoCD sync 전환 예정. 앱 sync 는 별도 deploy repo 대상 — config vs source code 분리 원칙 유지.
-
-수동 적용 흐름은 cold-start / DR 복구 자산으로 유지.
+helm install + `kubectl apply` 수동(멱등) 흐름이 cold-start / DR 복구 자산으로 유지되며, 이와 별개로 본 레포(인프라)는 self-managed Application + 기존 helm release adopt 구조로 **전환 완료**(`platform/argocd/apps/*.yaml`) — 단 adopt 단계는 수동 sync + prune off, selfHeal/prune 활성은 하드닝 turn. 앱 sync 는 별도 GitOps 레포(`k8s-gitops`) 대상 — config vs source code 분리 원칙 유지. 상세는 `platform/argocd/README.md` §6.
 
 ## 앱 매니페스트 위치
 

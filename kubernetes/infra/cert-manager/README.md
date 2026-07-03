@@ -120,9 +120,9 @@ ClusterIssuer가 `cert-manager` 네임스페이스의 Secret만 참조 가능 (c
 
 ## 5. 주의 사항
 
-### Gateway listener 연결은 별도 turn
+### Gateway listener 연결
 
-본 매니페스트는 cert-manager 설치 + Certificate 발급까지. `istio-system/public-gateway`의 HTTPS 443 listener 추가 + `certificateRefs: public-wildcard-tls` + HTTP→HTTPS redirect는 다음 step에서 수행.
+본 매니페스트는 cert-manager 설치 + Certificate 발급까지. `istio-system/public-gateway`의 HTTPS 443 listener(`https-apex`/`https-wildcard`, `certificateRefs: public-wildcard-tls`) + HTTP→HTTPS redirect는 `../istio/gateway.yaml` 에서 연결됨(적용 완료).
 
 ### Token 회전
 

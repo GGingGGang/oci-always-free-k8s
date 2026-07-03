@@ -8,10 +8,10 @@ infra 부트스트랩(Gateway / TLS / DNS) 위에서 동작하는 플랫폼 계�
 
 | 폴더 | 역할 | helm 릴리즈 | NS | 외부 노출 |
 |------|------|------------|-----|----------|
-| `argocd/` | GitOps 컨트롤 플레인 | argo/argo-cd `~7.7.0` | `cicd` (PSA baseline) | `argocd.ggang.cloud` |
-| `jenkins/` | JCasC Jenkins + Kaniko 동적 빌드 | jenkins/jenkins `~5.9.0` | `cicd` controller / `build` 빌드 Pod (PSA privileged) | admin: tailnet (parked) / webhook: `ci-hook.ggang.cloud` `/github-webhook/` |
+| `argocd/` | GitOps 컨트롤 플레인 | argo/argo-cd `~7.7.0` | `cicd` (PSA baseline) | tailnet (parked — `argocd.ggang.cloud` 주석 처리) |
+| `jenkins/` | JCasC Jenkins + Kaniko 동적 빌드 | jenkins/jenkins `~5.9.0` | `cicd` controller / `build` 빌드 Pod (PSA privileged) | admin: tailnet (parked) / webhook: `ci-hook.ggang.cloud` `/github-webhook/` (active) |
 | `openbao/` | 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal) | openbao/openbao `~0.28.0` | `vault` (PSA baseline) | 없음 (port-forward) |
-| `monitoring/` | 관측 (메트릭/알림/대시보드) | prometheus-community/kube-prometheus-stack `~75.0.0` | `monitoring` (PSA baseline) | `grafana.ggang.cloud` |
+| `monitoring/` | 관측 (메트릭/알림/대시보드) | prometheus-community/kube-prometheus-stack `~75.0.0` | `monitoring` (PSA baseline) | tailnet (parked — `grafana.ggang.cloud` 주석 처리) |
 | `redis/` | MSA 캐시 (cache-aside, ephemeral) | — (raw manifest, `redis:*-alpine`) | `data` (PSA baseline, ambient) | 없음 (ClusterIP, in-mesh) |
 | `kafka/` | MSA 이벤트 백본 (Strimzi, KRaft, ephemeral) | strimzi/strimzi-kafka-operator `1.0.1` + Kafka CR | `data` (PSA baseline, ambient) | 없음 (ClusterIP, in-mesh) |
 

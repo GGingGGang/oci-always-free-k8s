@@ -91,8 +91,8 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 
 ```
 .
-├── terraform/                  # OCI 인프라 (VCN, OKE, MySQL, KMS, IAM/NSG)
-│   ├── modules/{networking,oke,database,kms,iam}/
+├── terraform/                  # OCI 인프라 (VCN, OKE, MySQL, KMS, IAM/NSG, Object Storage)
+│   ├── modules/{networking,oke,database,kms,iam,object-storage}/
 │   └── README.md
 ├── kubernetes/                 # K8s 매니페스트
 │   ├── infra/                  # 부트스트랩 인프라
@@ -105,15 +105,14 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 │   │   ├── tailscale/
 │   │   └── README.md
 │   ├── platform/               # CI/CD · 플랫폼 · 데이터 서비스
-│   │   ├── argocd/             # GitOps 컨트롤 플레인
+│   │   ├── argocd/             # GitOps 컨트롤 플레인 (self-managed app-of-apps + 앱 레이어 진입점)
 │   │   ├── jenkins/            # JCasC + Kaniko 동적 빌드
 │   │   ├── openbao/            # 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal)
 │   │   ├── monitoring/         # kube-prometheus-stack
 │   │   ├── redis/              # MSA 캐시 (ephemeral, cache-aside)
 │   │   ├── kafka/              # MSA 이벤트 백본 (Strimzi, KRaft, ephemeral)
 │   │   └── README.md
-│   ├── apps/                   # 앱 레이어 GitOps (Application CR만; 매니페스트는 앱 레포)
-│   │   └── argocd/             # AppProject `apps` + app-of-apps root + 서비스별 Application
+│   ├── templates/              # 서비스 씨앗 (sed 토큰 치환) → svc-* 레포 + k8s-gitops
 │   ├── test/                   # 일회성 검증
 │   └── README.md
 └── docs/
@@ -121,6 +120,8 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
     ├── summary.md              # Always Free 카탈로그 (EN)
     └── summary-kr.md           # Always Free 카탈로그 (KR)
 ```
+
+앱 레이어 Application CR + 매니페스트는 전용 GitOps 레포(`k8s-gitops`)가 보유 — 본 인프라 레포에는 없음. Quick Start §5 참조.
 
 ## Quick Start
 
@@ -161,7 +162,7 @@ infra 계층 위에: ArgoCD(GitOps 컨트롤 플레인) + Jenkins(JCasC + Kaniko
 
 ### 5. 애플리케이션 배포
 
-MSA 서비스(현재 `core` — Go/chi 도메인 API)는 별도 `apps` ArgoCD 프로젝트(app-of-apps)로 배포 — 이 app-of-apps 는 인프라 레포가 아니라 전용 GitOps 레포(`k8s-gitops`)에 있다. 각 서비스는 자체 레포(코드 + `deploy/k8s`)이고, GitOps 레포는 Application 포인터만 보유. push → Jenkins(webhook → Kaniko → GHCR) → ArgoCD가 서비스별 NS에 매니페스트 sync → Istio Gateway가 `api.${domain}/v1/<service>` 로 노출.
+MSA 서비스(현재 `core` — Go/chi 도메인 API)는 별도 `apps` ArgoCD 프로젝트(app-of-apps)로 배포 — 이 app-of-apps 는 인프라 레포가 아니라 전용 GitOps 레포(`k8s-gitops`)에 있다. 각 서비스 레포(`svc-*`)는 코드 + `Dockerfile` + `Jenkinsfile`만 보유, GitOps 레포가 Application 포인터와 k8s 매니페스트(`manifests/<svc>/`)를 함께 보유. push → Jenkins(webhook → Kaniko → GHCR → shared library `deployBump` 가 `k8s-gitops` 에 태그 커밋) → ArgoCD가 서비스별 NS에 매니페스트 sync → Istio Gateway가 `api.${domain}/v1/<service>` 로 노출.
 
 ## 네트워크 구성
 

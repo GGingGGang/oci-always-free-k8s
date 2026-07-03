@@ -21,12 +21,12 @@ kubectl apply -f namespaces.yaml
 | `external-dns` | external-dns 전용 |
 | `cicd` | ArgoCD, Jenkins (PSA `enforce=baseline`, Istio ambient enrolled) |
 | `build` | Kaniko 빌드 Pod 전용 (PSA `enforce=privileged`) |
-| `monitoring` | kube-prometheus-stack, Loki, Grafana, Tempo, Kiali |
+| `monitoring` | kube-prometheus-stack (Prometheus/Alertmanager/Grafana) — Loki/Tempo/Kiali 는 예정 |
 | `vault` | OpenBao (PSA `enforce=baseline`, Istio ambient enrolled) |
 | `tailscale` | Tailscale subnet router (PSA `enforce=baseline`) |
 | `app` | 워크로드 (PSA `enforce=restricted`, Istio ambient enrolled) |
 | `core` | MSA 도메인 API 서비스 (PSA `enforce=restricted`, Istio ambient enrolled) |
-| `data` | 백킹 데이터 서비스 — Redis, 후속 Kafka (PSA `enforce=baseline`, Istio ambient enrolled) |
+| `data` | 백킹 데이터 서비스 — Redis, Kafka(Strimzi) (PSA `enforce=baseline`, Istio ambient enrolled) |
 
 ## 3. 검증
 
@@ -112,4 +112,4 @@ pod-security.kubernetes.io/audit: restricted
 
 ### MSA 서비스별 네임스페이스
 
-`core`(및 후속 `batch`/`login`)는 서비스당 1 NS. 단일 `app` NS 에 몰지 않는 사유: NetworkPolicy(L3/L4) 경계와 Istio AuthorizationPolicy `source.namespaces`(L7) 가 모두 NS 단위라, 동서(east-west) 격리를 NS 경계로 선언하면 정책이 단순하고 실수 여지가 준다. `app`(데모 워크로드)과도 분리 — 데모와 MSA 혼재 방지. 전부 `restricted` + ambient enrolled.
+서비스당 1 NS. 단일 `app` NS 에 몰지 않는 사유: NetworkPolicy(L3/L4) 경계와 Istio AuthorizationPolicy `source.namespaces`(L7) 가 모두 NS 단위라, 동서(east-west) 격리를 NS 경계로 선언하면 정책이 단순하고 실수 여지가 준다. `app`(데모 워크로드)과도 분리 — 데모와 MSA 혼재 방지. 현재 `core` 만 실존(`restricted` + ambient enrolled) — `batch`/`auth` 는 매니페스트 준비 후 동일 정책으로 추가 예정.

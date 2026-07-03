@@ -8,10 +8,10 @@ kubernetes/
 │   ├── rbac/README.md             # 본 문서 — 권한 매트릭스 + 컨벤션
 │   └── tailscale/rbac.yaml        # Tailscale SA + Role(state Secret) + RoleBinding
 └── platform/
-    ├── jenkins/rbac.yaml          # Jenkins SA + Role + RoleBinding
-    ├── argocd/rbac.yaml           # ArgoCD SA + ClusterRole + 다중 RoleBinding
-    └── monitoring/rbac.yaml       # Prometheus SA + ClusterRole + ClusterRoleBinding
+    └── jenkins/rbac.yaml          # Jenkins SA + Role + RoleBinding
 ```
+
+ArgoCD / Prometheus(kube-prometheus-stack)는 아직 전용 `rbac.yaml`이 없음 — chart 가 생성하는 기본 ClusterRole/ClusterRoleBinding 을 그대로 사용 중. 커스텀 RBAC 로 override 하게 되면 그 시점에 `platform/<comp>/rbac.yaml` 신설 + 본 표에 행 추가.
 
 분리 이유: chicken-egg 회피. 적용 대상 SA가 *존재하는 시점*에 RoleBinding을 함께 적용해야 *살아있는 RBAC*. 본 폴더의 설계가 *없는 SA에 대한 권한 설계*가 되면 종이호랑이.
 
@@ -31,6 +31,8 @@ kubernetes/
 | Jenkins → build | `cicd/jenkins` | `build` NS Pod CRUD (Kaniko 빌드 Pod 관리, cross-NS) | Role + RoleBinding | `platform/jenkins/rbac.yaml` |
 | Kaniko 빌드 | `build/kaniko-builder` | 권한 0건 (`automountServiceAccountToken: false`). Pod 신원 전용 | SA only | `platform/jenkins/rbac.yaml` |
 | Tailscale router | `tailscale/tailscale` | `tailscale` NS Secret create + `tailscale-state` get/update/patch (노드 state 영속) | Role + RoleBinding | `infra/tailscale/rbac.yaml` |
+
+ArgoCD/Prometheus는 위 §개요 참조 — chart 기본 RBAC 사용 중이라 본 표 미등재.
 
 ## 3. 검증
 

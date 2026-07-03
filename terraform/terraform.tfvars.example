@@ -21,3 +21,8 @@ ssh_authorized_keys = "ssh-rsa AAAAB3Nza... user@host"
 # Database
 # ──────────────────────────────────────────
 db_admin_password = "MyStr0ng#Pass!"
+
+# ──────────────────────────────────────────
+# Network access
+# ──────────────────────────────────────────
+allowed_cidr = "1.2.3.4/32"

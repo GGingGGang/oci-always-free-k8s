@@ -1,6 +1,6 @@
 # ArgoCD
 
-GitOps 컨트롤 플레인. helm install + HTTPRoute 외부 노출까지. SSO / 앱 sync 는 별도 turn.
+GitOps 컨트롤 플레인. helm install + HTTPRoute 외부 노출 + self-managed app-of-apps(§6) + 앱 레이어 GitOps 진입점(`app-layer.yaml` → `k8s-gitops`) 까지 구성 완료. SSO 만 별도 turn.
 
 참조:
 - https://github.com/argoproj/argo-helm (chart `argo/argo-cd`)
@@ -59,7 +59,7 @@ UI 접근: 브라우저에서 `http://<argocd-server ClusterIP>` (tailnet) → a
 
 본 레포(인프라)의 `kubernetes/` 매니페스트를 ArgoCD 가 sync 하는 모델 채택. 초기엔 "helm release 만으로 충분" 으로 미채택했으나 결정 뒤집음. 사유:
 
-- git 이 진실 = `selfHeal` 정합 — 수동 `kubectl apply`/helm 운영에서 발생하는 드리프트를 감지·자동 복구
+- git 이 진실 = drift 를 ArgoCD 가 감지(diff). **현재는 adopt 단계라 수동 sync + selfHeal off** — 자동 복구까지 활성화되는 하드닝 turn 은 §6 참조
 - 기존 helm release (cert-manager / external-dns / istio / jenkins / argocd 자신) 는 컴포넌트별 Application 으로 adopt
 - 앱 레이어는 **별도 AppProject `apps` + 별도 app-of-apps** 로 분리 — config vs source code 분리 + 인프라/앱 권한 경계는 git/project 레벨에서 강제. 본 `platform` 프로젝트(인프라)와 권한·sync 정책 분리.
 
@@ -144,7 +144,7 @@ argocd/
 
 ### 인프라 → 앱 레이어 체인
 
-`app-layer.yaml` 은 `platform-root` 가 관리하는 자식 Application(`app-layer-root`) 로, 앱 레이어 GitOps 레포(`k8s-gitops`)의 `argocd/` 에서 `project.yaml`(AppProject `apps`) + `root.yaml`(app-of-apps `apps-root`) 만 sync 한다. 이후 `apps-root` 가 `k8s-gitops/argocd/apps/` 의 서비스 Application(core/batch/login) 을 관리 — 앱 매니페스트 정의는 전부 `k8s-gitops` 소유, 본 레포엔 진입 포인터 1개만.
+`app-layer.yaml` 은 `platform-root` 가 관리하는 자식 Application(`app-layer-root`) 로, 앱 레이어 GitOps 레포(`k8s-gitops`)의 `argocd/` 에서 `project.yaml`(AppProject `apps`) + `root.yaml`(app-of-apps `apps-root`) 만 sync 한다. 이후 `apps-root` 가 `k8s-gitops/argocd/apps/` 의 서비스 Application 을 관리 — 앱 매니페스트 정의는 전부 `k8s-gitops` 소유, 본 레포엔 진입 포인터 1개만. 현재 `core.yaml` 만 존재(적용 완료), `batch`/`auth` 는 매니페스트 준비 후 동일 패턴으로 추가 예정.
 
 ```
 platform-root (본 레포, 인프라)
@@ -188,6 +188,8 @@ adopt 정상 판정: diff 가 `app.kubernetes.io/instance` 라벨 + `argocd.argo
 | 3 | cert-manager-resources, kps, jenkins-rbac |
 | 4 | istio-gateway, jenkins, argocd (self) |
 | 5 | jenkins-httproute, argocd-httproute, monitoring-httproute, app-layer-root |
+| 6 | redis, strimzi-operator |
+| 8 | kafka (Kafka CR — strimzi operator CRD 선행 필요, wave 6과 간격 확보) |
 
 `argocd` 자기 관리(self-manage)는 잘못 sync 하면 자기 손을 자르므로 wave 4 + **수동 sync 전용**. 하드닝 turn 에서도 selfHeal 활성은 마지막.
 

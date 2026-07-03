@@ -70,7 +70,7 @@ Enhanced ($0.10/h) 대신 Basic 선택. 컨트롤 플레인 자체 무료, 워�
 
 ### NSG 기반 admin 접근 제한
 
-`oci_core_network_security_group.public_access` — `allowed_cidr` 에서 TCP 6443(OKE API) / 443 / 80 만 허용 (포트 명시, `protocol all` 비채택 — 허용 IP 침해 시에도 도달 포트 최소화). OKE API endpoint(`endpoint_nsg_ids`) + LoadBalancer (`oci-load-balancer-nsg-ids` annotation으로 k8s Service에 부여) 양쪽에 부착. Security List가 `0.0.0.0/0` 허용해도 NSG가 한 번 더 거름. CIDR 변경은 `terraform apply` 한 번으로 동기.
+`oci_core_network_security_group.public_access` — `allowed_cidr` 에서 TCP 6443(OKE API) / 443 / 80 만 허용 (포트 명시, `protocol all` 비채택 — 허용 IP 침해 시에도 도달 포트 최소화). 현재 OKE API endpoint(`endpoint_nsg_ids`)에만 부착 — LoadBalancer(Gateway API가 프로비전하는 NLB)는 `kubernetes/infra/istio/gateway.yaml`의 `infrastructure.annotations`에 NSG 지정이 없어 미부착 상태. Security List가 `0.0.0.0/0` 허용해도 API endpoint는 NSG가 한 번 더 거름. CIDR 변경은 `terraform apply` 한 번으로 동기.
 
 ### KMS — OpenBao auto-unseal 키
 

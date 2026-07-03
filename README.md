@@ -91,8 +91,8 @@ Full catalog: [`docs/summary.md`](./docs/summary.md).
 
 ```
 .
-├── terraform/                  # OCI infra (VCN, OKE, MySQL, KMS, IAM/NSG)
-│   ├── modules/{networking,oke,database,kms,iam}/
+├── terraform/                  # OCI infra (VCN, OKE, MySQL, KMS, IAM/NSG, Object Storage)
+│   ├── modules/{networking,oke,database,kms,iam,object-storage}/
 │   └── README.md
 ├── kubernetes/                 # K8s manifests
 │   ├── infra/                  # Bootstrap infra
@@ -105,15 +105,14 @@ Full catalog: [`docs/summary.md`](./docs/summary.md).
 │   │   ├── tailscale/
 │   │   └── README.md
 │   ├── platform/               # CI/CD · platform · data services
-│   │   ├── argocd/             # GitOps control plane
+│   │   ├── argocd/             # GitOps control plane (self-managed app-of-apps + app-layer entrypoint)
 │   │   ├── jenkins/            # JCasC + Kaniko dynamic builds
 │   │   ├── openbao/            # Secrets store (Raft 1 + OCI KMS auto-unseal)
 │   │   ├── monitoring/         # kube-prometheus-stack
 │   │   ├── redis/              # MSA cache (ephemeral, cache-aside)
 │   │   ├── kafka/              # MSA event backbone (Strimzi, KRaft, ephemeral)
 │   │   └── README.md
-│   ├── apps/                   # App layer GitOps (Application CRs; manifests live in app repos)
-│   │   └── argocd/             # AppProject `apps` + app-of-apps root + per-service Application
+│   ├── templates/              # Service scaffolds (sed-token stamped) → svc-* repo + k8s-gitops
 │   ├── test/                   # One-shot validation
 │   └── README.md
 └── docs/
@@ -121,6 +120,8 @@ Full catalog: [`docs/summary.md`](./docs/summary.md).
     ├── summary.md              # Always Free catalog (EN)
     └── summary-kr.md           # Always Free catalog (KR)
 ```
+
+App layer Application CRs + manifests live in a dedicated GitOps repo (`k8s-gitops`), not in this infra repo — see Quick Start §5.
 
 ## Quick Start
 
@@ -161,7 +162,7 @@ Details: [`kubernetes/platform/README.md`](./kubernetes/platform/README.md).
 
 ### 5. Deploy applications
 
-MSA services (currently `core`, a Go/chi domain API) deploy through a separate `apps` ArgoCD project (app-of-apps) that lives in its own GitOps repo (`k8s-gitops`) — not in this infra repo. Each service is its own repo (code + `deploy/k8s`); the GitOps repo holds only the Application pointers. Push triggers Jenkins (webhook → Kaniko → GHCR); ArgoCD syncs the manifests to a per-service namespace and the Istio Gateway exposes it under `api.${domain}/v1/<service>`.
+MSA services (currently `core`, a Go/chi domain API) deploy through a separate `apps` ArgoCD project (app-of-apps) that lives in its own GitOps repo (`k8s-gitops`) — not in this infra repo. Each service repo (`svc-*`) holds only code + `Dockerfile` + `Jenkinsfile`; the GitOps repo holds both the Application pointers and the k8s manifests (`manifests/<svc>/`). Push triggers Jenkins (webhook → Kaniko → GHCR → shared-library `deployBump` commits the new tag to `k8s-gitops`); ArgoCD syncs the manifests to a per-service namespace and the Istio Gateway exposes it under `api.${domain}/v1/<service>`.
 
 ## Network Layout
 

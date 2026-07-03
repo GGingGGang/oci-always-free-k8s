@@ -146,7 +146,7 @@ HA controller는 Jenkins 라이선스/플러그인 호환성 폭증. 본 환경�
 - **Kubernetes plugin**: `kubernetes` + `kubernetes-client-api` + `kubernetes-credentials` (동적 agent)
 - **JCasC**: `configuration-as-code` + `snakeyaml-api`
 - **GitHub/Git 연동**: `git`, `git-client`, `github`, `github-api`, `github-branch-source`, `credentials-binding`
-- **UI**: `pipeline-stage-view`, `pipeline-rest-api`, `dashboard-view` 류
+- **UI**: `pipeline-stage-view`, `pipeline-rest-api`
 - **Transitive deps**: API plugin 다수 (`commons-*`, `jackson2-api`, `okhttp-api` 등) — *명시 pin 안 하면 UC-latest 로 떠서 mismatch 발생 위험*
 
 명시 일부 pin 만으로는 transitive 통제 불가. `pipeline-model-api/extensions/definition` trio 처럼 release wave 가 어긋나면 Declarative Pipeline 로드 실패. *전체 plugin set 을 한 번에 pin* 하는 것이 유일한 재현성 보장.
@@ -213,37 +213,44 @@ cache + memory 폭주 회피 args (Jenkinsfile 에서 주입):
 
 **`--ignore-path` 필수 — kaniko ↔ durable-task hang**: kaniko 는 최종 이미지 fs 를 컨테이너 `/` 에 풀며 debug 이미지의 shell(`/busybox`)을 덮어쓴다. 그러면 Jenkins durable-task wrapper 가 step 종료코드(`jenkins-result.txt`)를 못 써서 — **이미지는 GHCR push 성공인데 잡은 무한 hang**. `/busybox`(shell)와 `/home/jenkins`(agent workspace) 를 ignore-path 로 보존하면 해소. 증상 식별: 살아있는 `jnlp` 컨테이너로 `find /home/jenkins/agent/workspace -name jenkins-result.txt` → 파일 부재면 이 케이스.
 
-Jenkinsfile 예시:
+위 `/kaniko/executor` 옵션들은 shared library `kanikoBuild` step 이 내부적으로 조립한다 (`jenkins-shared-library/vars/kanikoBuild.groovy`). 앱 레포 `Jenkinsfile` 은 raw kaniko 호출을 직접 쓰지 않고 shared library 를 통해서만 빌드한다:
 
 ```groovy
+@Library('shared') _
+
 pipeline {
-  agent { label 'kaniko' }
+  agent {
+    kubernetes {
+      label 'kaniko'
+      defaultContainer 'kaniko'
+    }
+  }
   environment {
-    GIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
+    SVC   = 'core'
+    IMAGE = "ghcr.io/${env.GH_ORG.toLowerCase()}/svc-${SVC}"
+    TAG   = "${env.GIT_COMMIT}"
   }
   stages {
-    stage('build & push') {
+    stage('Build & Push') {
       steps {
-        container('kaniko') {
-          sh '''
-            /kaniko/executor \
-              --dockerfile=Dockerfile \
-              --context=`pwd` \
-              --destination=ghcr.io/${GHCR_USER}/myapp:${GIT_SHA} \
-              --cache=true \
-              --cache-repo=ghcr.io/${GHCR_USER}/cache \
-              --customPlatform=linux/arm64 \
-              --snapshot-mode=redo \
-              --use-new-run \
-              --ignore-path=/busybox \
-              --ignore-path=/home/jenkins
-          '''
-        }
+        kanikoBuild(
+          image: env.IMAGE,
+          context: "dir://${env.WORKSPACE}",
+          tags: [env.TAG, 'latest'],
+          buildArgs: [GIT_SHA: env.GIT_COMMIT]
+        )
+      }
+    }
+    stage('Bump') {
+      steps {
+        deployBump(service: env.SVC, image: env.IMAGE, tag: env.TAG)
       }
     }
   }
 }
 ```
+
+`kanikoBuild`/`deployBump` 상세 파라미터는 `jenkins-shared-library/README.md` 참조.
 
 ### JCasC seed — 환경변수 · 자격증명 · 라이브러리 · 잡
 
@@ -301,7 +308,7 @@ manifest commit 패턴: Jenkins 는 *k8s API 직접 호출 ❌*, *git push (`k8s
 보호 레이어:
 
 1. **경로 스코프** — HTTPRoute 가 `/github-webhook/` 만 매칭. `/`·`/script` 등은 매칭 룰 없어 404 → admin UI 는 public 으로 안 샘.
-2. **HMAC** — `gh-webhook-secret`. GitHub plugin 이 `X-Hub-Signature-256` 검증 → 서명 없는 요청 무시. 경로가 public 이어도 시크릿 보유자(GitHub)만 의미 있는 트리거.
+2. **HMAC (설계, 미적용)** — `gh-webhook-secret` 을 GitHub repo webhook 설정의 Secret 필드 + Jenkins GitHub plugin 양쪽에 등록하면 `X-Hub-Signature-256` 검증으로 서명 없는 요청을 거부할 수 있다. **현재 이 Secret 을 생성하거나 JCasC 에 연결하는 매니페스트/설정이 레포에 없음** — 미구현 상태. 지금은 경로 스코프(1번)만으로 방어.
 3. *(선택, 미적용)* GitHub hooks IP 대역(`api.github.com/meta`) allowlist — defense-in-depth. 대역 변동 유지비 있어 1·2 로 충분, 후속 검토.
 
 `cicd` 가 ambient enrolled 라 게이트웨이→jenkins hop 은 ztunnel L4 mTLS. 엣지 TLS 종료(wildcard cert) + 내부 mTLS 둘 다 충족. external-dns 가 `hostnames` 를 source 로 `ci-hook.ggang.cloud` A 레코드 자동 등록.
@@ -318,7 +325,7 @@ manifest commit 패턴: Jenkins 는 *k8s API 직접 호출 ❌*, *git push (`k8s
 앱 레포 등장 시점에 추가 도입:
 
 - `ghcr-pull` — 앱 Pod (`app` NS) `imagePullSecrets`
-- `gh-webhook-secret` — GitHub Webhook HMAC SHA-256 검증
+- `gh-webhook-secret` — GitHub Webhook HMAC SHA-256 검증. **설계만 존재, 실제 Secret 생성/JCasC 연결 미구현** (위 §HMAC 참조)
 
 모두 Vault Agent Injector 또는 GitHub App 으로 이관 예정.
 
