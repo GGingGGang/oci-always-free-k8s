@@ -149,7 +149,7 @@ argocd/
 ```
 platform-root (본 레포, 인프라)
  └── app-layer-root ──► k8s-gitops/argocd  (project.yaml + root.yaml)
-        └── apps-root ──► k8s-gitops/argocd/apps  ──► core / batch / login
+        └── apps-root ──► k8s-gitops/argocd/apps  ──► core / batch / auth
 ```
 
 포인터 자신(`app-layer-root`)은 `apps` AppProject 를 *정의*하는 `project.yaml` 을 배포하므로 `apps` 프로젝트에 속할 수 없다(순환) → `project: platform`. 그래서 `project.yaml` 의 `sourceRepos` 에 `k8s-gitops.git` 을 추가해 두었다.
