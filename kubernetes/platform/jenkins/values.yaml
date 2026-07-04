@@ -188,10 +188,11 @@ controller:
                 }
                 triggers {
                   periodicFolderTrigger {
-                    interval('1d')
+                    interval('15m')
                   }
                 }
               }
+              queue('services')
 
 persistence:
   enabled: false

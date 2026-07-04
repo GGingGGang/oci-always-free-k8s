@@ -263,13 +263,14 @@ pipeline {
 - **`jobs-config`** — `job-dsl` 로 잡을 선언적 생성. UI 클릭 잡 생성은 emptyDir 라 재기동 시 증발하므로 무효. `organizationFolder('services')` 1개가 레포를 **자동 발견** — 잡을 명세하지 않고 발견 규칙만 명세:
   - `repoOwner('${GH_ORG}')` + `sourceRegexFilter('svc-.*')` — 소유자의 레포 중 `svc-` prefix 만 골라 각각 multibranch 파이프라인 생성. 인벤토리를 git 에 손으로 나열하지 않고 GitHub 스캔으로 재도출 → emptyDir(stateless) 철학과 정합(job 목록조차 상태로 안 들고 boot 마다 derive).
   - `workflowMultiBranchProjectFactory { scriptPath('Jenkinsfile') }` — 발견된 레포 루트 `Jenkinsfile` 로 파이프라인 정의 (정의는 앱 레포 소유).
-  - `gitHubBranchDiscovery(strategyId 1)` 브랜치만 발견(PR 미포함) · `periodicFolderTrigger('1d')` 웹훅 미설정 시 하루 1회 재스캔 폴백 · `orphanedItemStrategy` 사라진 브랜치/레포 잡 자동 정리.
+  - `gitHubBranchDiscovery(strategyId 1)` 브랜치만 발견(PR 미포함) · `periodicFolderTrigger('15m')` 웹훅 유실·신규 레포 폴백 재스캔 · `orphanedItemStrategy` 사라진 브랜치/레포 잡 자동 정리.
+  - `queue('services')` — job-dsl 은 폴더를 **생성만** 하고 첫 Scan Organization 을 스스로 돌리지 않는다. emptyDir 콜드부트 직후는 잡 0개 상태라 webhook 이 와도 매칭 대상이 없으므로, JCasC 적용(부팅·reload) 시마다 스캔을 큐잉해 잡 인벤토리를 사람 개입 없이 재도출.
 
 > 앱 추가 계약: 레포명 `svc-<service>` (예: `svc-core`, `svc-auth`) + 루트 `Jenkinsfile`. 이름 규칙만 지키면 다음 스캔에 자동 편입 — `jobs-config` · 인프라 무수정. `svc-` prefix 가 인프라/라이브러리 레포(`oci-terraform`/`jenkins-shared-library`/`k8s-gitops`)를 멤버십에서 자동 배제. 타입(front/back/batch)은 멤버십 regex 에 안 넣고 각 레포 Jenkinsfile(shared library 호출)이 처리 — 타입 늘어도 regex 무수정.
 
 > 자격증명·라이브러리·발견이 모두 `${GH_ORG}` 로 소유자를 구성 → org 이전 시 `containerEnv` 한 곳만 변경.
 
-> 트리거 등록 방식: `organizationFolder` 는 발견한 레포에 훅 자동 등록 가능 — `github-token` 에 `admin:repo_hook` scope 면 스캔 시 레포별 webhook 생성, 없으면 `periodicFolderTrigger('1d')` 폴백(최대 하루 지연). 개인 계정은 계정-레벨 훅이 없어 레포별 훅 or 폴백, 진짜 org 는 org-레벨 단일 훅 가능. 종착지는 GitHub App.
+> 트리거 등록 방식: `organizationFolder` 는 발견한 레포에 훅 자동 등록 가능 — `github-token` 에 `admin:repo_hook` scope 면 스캔 시 레포별 webhook 생성, 없으면 `periodicFolderTrigger('15m')` 폴백(최대 15분 지연). 개인 계정은 계정-레벨 훅이 없어 레포별 훅 or 폴백, 진짜 org 는 org-레벨 단일 훅 가능. 종착지는 GitHub App.
 
 GHCR 레포 경로는 **소문자 강제** — GitHub 계정명에 대문자가 있으면 Jenkinsfile 에서 `${env.GH_ORG.toLowerCase()}` 로 이미지 경로 구성(git clone URL 은 원본 케이싱 유지 가능).
 
