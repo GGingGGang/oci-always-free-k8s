@@ -26,6 +26,7 @@ kubectl apply -f namespaces.yaml
 | `tailscale` | Tailscale subnet router (PSA `enforce=baseline`) |
 | `app` | 워크로드 (PSA `enforce=restricted`, Istio ambient enrolled) |
 | `core` | MSA 도메인 API 서비스 (PSA `enforce=restricted`, Istio ambient enrolled) |
+| `auth` | MSA 도메인 auth API 서비스 (PSA `enforce=restricted`, Istio ambient enrolled) |
 | `data` | 백킹 데이터 서비스 — Redis, Kafka(Strimzi) (PSA `enforce=baseline`, Istio ambient enrolled) |
 
 ## 3. 검증
