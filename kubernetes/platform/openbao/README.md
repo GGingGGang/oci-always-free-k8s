@@ -98,9 +98,9 @@ HSM 키는 키 버전당 과금, software 키는 무료 — Always Free 0원 유
 
 listener 평문 — `vault` 네임스페이스가 Istio Ambient에 enrolled되어 있어(`istio.io/dataplane-mode: ambient`), 메시 내부 caller↔OpenBao hop은 ztunnel L4 mTLS로 보호된다. 라벨이 곧 스위치 — enrollment 없으면 내부 hop도 평문이므로 이 전제는 `vault` enrolled 상태에 의존한다. ArgoCD `--insecure`와 동일 패턴. 외부 노출 자체가 없어 Gateway TLS 경로도 불요. (보호는 *메시 내부* hop 한정 — 현재 ESO 등 in-mesh caller는 후속.)
 
-### Agent Injector (ESO는 후속 비교)
+### Agent Injector (일부 시크릿은 ESO 필수로 확정)
 
-annotation 기반 sidecar 주입 채택. External Secrets Operator는 rotation 시 Pod 재시작 불요 + OpenBao 일시 장애에도 k8s Secret 캐시 유지라는 장점이 있어, 시크릿 이관 turn에서 병행/대체 재검토.
+annotation 기반 sidecar 주입을 기본 채택하되, `ghcr-push`/`ghcr-pull`처럼 **Pod 생성 이전에 이미 존재해야 하는 k8s Secret 객체**(imagePullSecret, projected volume 참조)는 Injector 로 구조적으로 만들 수 없음 — Injector는 Pod 내부에 런타임 파일을 주입할 뿐 Secret 오브젝트 자체를 사전 생성하지 못하는 닭-달걀 문제. 이 부류는 **ESO 채택 확정**. 그 외(런타임에 파일/env 로 받아도 되는 시크릿, 예: DB 자격증명)는 Injector 유지. 두 방식이 시크릿 종류별로 공존.
 
 ## 5. 주의 사항
 

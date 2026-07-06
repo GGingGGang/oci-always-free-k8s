@@ -144,7 +144,7 @@ argocd/
 
 ### 인프라 → 앱 레이어 체인
 
-`app-layer.yaml` 은 `platform-root` 가 관리하는 자식 Application(`app-layer-root`) 로, 앱 레이어 GitOps 레포(`k8s-gitops`)의 `argocd/` 에서 `project.yaml`(AppProject `apps`) + `root.yaml`(app-of-apps `apps-root`) 만 sync 한다. 이후 `apps-root` 가 `k8s-gitops/argocd/apps/` 의 서비스 Application 을 관리 — 앱 매니페스트 정의는 전부 `k8s-gitops` 소유, 본 레포엔 진입 포인터 1개만. 현재 `core.yaml` 만 존재(적용 완료), `batch`/`auth` 는 매니페스트 준비 후 동일 패턴으로 추가 예정.
+`app-layer.yaml` 은 `platform-root` 가 관리하는 자식 Application(`app-layer-root`) 로, 앱 레이어 GitOps 레포(`k8s-gitops`)의 `argocd/` 에서 `project.yaml`(AppProject `apps`) + `root.yaml`(app-of-apps `apps-root`) 만 sync 한다. 이후 `apps-root` 가 `k8s-gitops/argocd/apps/` 의 서비스 Application 을 관리 — 앱 매니페스트 정의는 전부 `k8s-gitops` 소유, 본 레포엔 진입 포인터 1개만. 현재 `core.yaml`/`batch.yaml` 존재(적용 완료, 두 서비스 모두 CI/CD e2e 배포 검증됨), `auth` 는 매니페스트 정리(이미지 참조·네임스페이스 정합) 후 동일 패턴으로 추가 예정.
 
 ```
 platform-root (본 레포, 인프라)

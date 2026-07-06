@@ -14,12 +14,12 @@ This repo is the entry point. Application code, GitOps state, and CI tooling liv
 | Repo | Role | Status |
 |------|------|--------|
 | **oci-terraform** (this repo) | OCI Terraform + Kubernetes infra (VCN/OKE, platform, bootstrap) | in progress |
-| [k8s-gitops](https://github.com/GGingGGang/k8s-gitops) | App layer GitOps — Application CRs + manifests (`manifests/<svc>`) | `core` live, `batch`/`auth` planned |
+| [k8s-gitops](https://github.com/GGingGGang/k8s-gitops) | App layer GitOps — Application CRs + manifests (`manifests/<svc>`) | `core`, `batch` live, `auth` planned |
 | [app-templates](https://github.com/GGingGGang/app-templates) | Service scaffolds (sed-token stamped) → new `svc-*` repo + `k8s-gitops` | `go-app` done, `java-app` planned |
 | [jenkins-shared-library](https://github.com/GGingGGang/jenkins-shared-library) | Jenkins Global Pipeline Library (`kanikoBuild`, `deployBump`) | in use |
 | [svc-core](https://github.com/GGingGGang/svc-core) | Schedule domain API (Go/chi) | CI/CD verified end-to-end, domain logic in progress |
+| svc-batch | Reminder/Kafka consumer (Java/Spring Batch) | CI/CD verified end-to-end, M1 deployed and running |
 | svc-auth | Auth/session/token (Node.js/Fastify) | bootstrap |
-| svc-batch | Reminder/Kafka consumer (Java/Spring Batch) | bootstrap |
 
 ## Stack
 
@@ -31,7 +31,7 @@ This repo is the entry point. Application code, GitOps state, and CI tooling liv
 | DNS | external-dns + Cloudflare | done |
 | TLS | cert-manager + Let's Encrypt (DNS-01) | done |
 | GitOps | ArgoCD, Jenkins, GHCR | done |
-| App (MSA) | core (Go/chi) → Kaniko/GHCR → ArgoCD app-of-apps | in progress |
+| App (MSA) | core (Go/chi), batch (Java/Spring Batch) → Kaniko/GHCR → ArgoCD app-of-apps | in progress |
 | Secrets | OpenBao (Vault), OCI KMS auto-unseal | done |
 | Observability | kube-prometheus-stack (metrics) | done · Loki/Alloy/Tempo/Kiali planned |
 | Security | Trivy, Kyverno, cosign, PSA, NetworkPolicy | planned |
@@ -128,6 +128,7 @@ Full catalog: [`docs/summary.md`](./docs/summary.md).
 │   │   └── README.md
 │   ├── test/                   # One-shot validation
 │   └── README.md
+├── scripts/                    # Recurring ops tooling (e.g. onboard-app-db.sh)
 └── docs/
     ├── README-KR.md            # Korean mirror
     ├── summary.md              # Always Free catalog (EN)
@@ -175,7 +176,7 @@ Details: [`kubernetes/platform/README.md`](./kubernetes/platform/README.md).
 
 ### 5. Deploy applications
 
-MSA services (currently `core`, a Go/chi domain API) deploy through a separate `apps` ArgoCD project (app-of-apps) that lives in its own GitOps repo (`k8s-gitops`) — not in this infra repo. Each service repo (`svc-*`) holds only code + `Dockerfile` + `Jenkinsfile`; the GitOps repo holds both the Application pointers and the k8s manifests (`manifests/<svc>/`). Push triggers Jenkins (webhook → Kaniko → GHCR → shared-library `deployBump` commits the new tag to `k8s-gitops`); ArgoCD syncs the manifests to a per-service namespace and the Istio Gateway exposes it under `api.${domain}/v1/<service>`.
+MSA services (`core`, a Go/chi domain API, and `batch`, a Java/Spring Batch consumer) deploy through a separate `apps` ArgoCD project (app-of-apps) that lives in its own GitOps repo (`k8s-gitops`) — not in this infra repo. Each service repo (`svc-*`) holds only code + `Dockerfile` + `Jenkinsfile`; the GitOps repo holds both the Application pointers and the k8s manifests (`manifests/<svc>/`). Push triggers Jenkins (webhook → Kaniko → GHCR → shared-library `deployBump` commits the new tag to `k8s-gitops`); ArgoCD syncs the manifests to a per-service namespace and the Istio Gateway exposes it under `api.${domain}/v1/<service>`.
 
 ## Network Layout
 

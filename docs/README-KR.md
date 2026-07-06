@@ -14,12 +14,12 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 | 레포 | 역할 | 상태 |
 |------|------|------|
 | **oci-terraform** (본 레포) | OCI Terraform + Kubernetes 인프라 (VCN/OKE, 플랫폼, 부트스트랩) | 진행 중 |
-| [k8s-gitops](https://github.com/GGingGGang/k8s-gitops) | 앱 레이어 GitOps — Application CR + 매니페스트 (`manifests/<svc>`) | `core` 적용 완료, `batch`/`auth` 예정 |
+| [k8s-gitops](https://github.com/GGingGGang/k8s-gitops) | 앱 레이어 GitOps — Application CR + 매니페스트 (`manifests/<svc>`) | `core`, `batch` 적용 완료, `auth` 예정 |
 | [app-templates](https://github.com/GGingGGang/app-templates) | 서비스 씨앗 (sed 토큰 치환) → 새 `svc-*` 레포 + `k8s-gitops` | `go-app` 완료, `java-app` 예정 |
 | [jenkins-shared-library](https://github.com/GGingGGang/jenkins-shared-library) | Jenkins Global Pipeline Library (`kanikoBuild`, `deployBump`) | 사용 중 |
 | [svc-core](https://github.com/GGingGGang/svc-core) | 일정 도메인 API (Go/chi) | CI/CD 완주 검증됨, 도메인 로직 진행 중 |
+| svc-batch | 리마인더/Kafka consumer (Java/Spring Batch) | CI/CD 완주 검증됨, M1 배포·운영 중 |
 | svc-auth | 인증/세션/토큰 (Node.js/Fastify) | 부트스트랩 단계 |
-| svc-batch | 리마인더/Kafka consumer (Java/Spring Batch) | 부트스트랩 단계 |
 
 ## 스택
 
@@ -31,7 +31,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 | DNS | external-dns + Cloudflare | 완료 |
 | TLS | cert-manager + Let's Encrypt (DNS-01) | 완료 |
 | GitOps | ArgoCD, Jenkins, GHCR | 완료 |
-| 앱 (MSA) | core (Go/chi) → Kaniko/GHCR → ArgoCD app-of-apps | 진행 중 |
+| 앱 (MSA) | core (Go/chi), batch (Java/Spring Batch) → Kaniko/GHCR → ArgoCD app-of-apps | 진행 중 |
 | 시크릿 | OpenBao (Vault), OCI KMS auto-unseal | 완료 |
 | 관측 | kube-prometheus-stack (메트릭) | 완료 · Loki/Alloy/Tempo/Kiali 예정 |
 | 보안 | Trivy, Kyverno, cosign, PSA, NetworkPolicy | 예정 |
@@ -128,6 +128,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 │   │   └── README.md
 │   ├── test/                   # 일회성 검증
 │   └── README.md
+├── scripts/                    # 반복 실행되는 운영 도구 (예: onboard-app-db.sh)
 └── docs/
     ├── README-KR.md            # 한국어 미러 (본 문서)
     ├── summary.md              # Always Free 카탈로그 (EN)
@@ -175,7 +176,7 @@ infra 계층 위에: ArgoCD(GitOps 컨트롤 플레인) + Jenkins(JCasC + Kaniko
 
 ### 5. 애플리케이션 배포
 
-MSA 서비스(현재 `core` — Go/chi 도메인 API)는 별도 `apps` ArgoCD 프로젝트(app-of-apps)로 배포 — 이 app-of-apps 는 인프라 레포가 아니라 전용 GitOps 레포(`k8s-gitops`)에 있다. 각 서비스 레포(`svc-*`)는 코드 + `Dockerfile` + `Jenkinsfile`만 보유, GitOps 레포가 Application 포인터와 k8s 매니페스트(`manifests/<svc>/`)를 함께 보유. push → Jenkins(webhook → Kaniko → GHCR → shared library `deployBump` 가 `k8s-gitops` 에 태그 커밋) → ArgoCD가 서비스별 NS에 매니페스트 sync → Istio Gateway가 `api.${domain}/v1/<service>` 로 노출.
+MSA 서비스(`core` — Go/chi 도메인 API, `batch` — Java/Spring Batch consumer)는 별도 `apps` ArgoCD 프로젝트(app-of-apps)로 배포 — 이 app-of-apps 는 인프라 레포가 아니라 전용 GitOps 레포(`k8s-gitops`)에 있다. 각 서비스 레포(`svc-*`)는 코드 + `Dockerfile` + `Jenkinsfile`만 보유, GitOps 레포가 Application 포인터와 k8s 매니페스트(`manifests/<svc>/`)를 함께 보유. push → Jenkins(webhook → Kaniko → GHCR → shared library `deployBump` 가 `k8s-gitops` 에 태그 커밋) → ArgoCD가 서비스별 NS에 매니페스트 sync → Istio Gateway가 `api.${domain}/v1/<service>` 로 노출.
 
 ## 네트워크 구성
 

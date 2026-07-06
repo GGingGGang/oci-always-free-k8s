@@ -150,6 +150,7 @@ kubectl -n default delete secret db-smoketest-creds
 |------|-----------|------|
 | `Can't connect to MySQL server on '10.0.201.x' (110)` / timeout | sl-db ingress 누락 | `terraform/modules/networking/main.tf` `oci_core_security_list.db` ingress 규칙 확인. workers CIDR (`10.0.102.0/24`) → 3306 허용 여부 |
 | 동일 timeout + sl-db 정상 | workers SL egress 누락 | `oci_core_security_list.workers` egress to `10.0.201.0/28:3306` 확인 |
+| 동일 timeout + SL 둘 다 정상 | **HeatWave Always Free 인스턴스가 장기 미사용으로 inactive 상태** | OCI 콘솔에서 DB System 상태 확인. `INACTIVE` 면 콘솔에서 재기동(Start) → `UPDATING` 거쳐 `ACTIVE` 전환까지 대기 후 재시도 |
 | `Access denied for user 'admin'@'%'` | password 불일치 | `kubectl get secret db-smoketest-creds -o jsonpath='{.data.password}' \| base64 -d` 로 저장값 확인 (디버그 후 즉시 종료) |
 | `SSL connection error: protocol version mismatch` | client TLS 버전이 server 미지원 | `--tls-version=TLSv1.2,TLSv1.3` 명시 |
 | `ERROR 2003 ... Unknown MySQL server host` | DNS 가 IP literal 을 호스트로 해석 시도 (드물게) | `<heatwave-private-ip>` placeholder 가 sed 치환 안 됨. `kubectl describe pod db-smoketest` env 확인 |
@@ -159,5 +160,5 @@ kubectl -n default delete secret db-smoketest-creds
 
 ### 5-4. 잔여 추적
 
-- 본 smoketest 는 admin user 로 검증. 실 앱은 별도 user (`app_*`) + 제한 권한으로 접속 — 그건 앱 등장 시점에 마이그레이션
+- 본 smoketest 는 admin user 로 검증. 실 앱은 별도 user (`app_*`) + 제한 권한으로 접속 — 서비스별 온보딩은 [`scripts/README.md`](../../../scripts/README.md)의 `onboard-app-db.sh` 참조 (본 smoketest 와 동일한 admin 1회 접속 패턴)
 - Vault 도입 후엔 Secret 직접 생성 대신 Vault Database secrets engine 으로 dynamic credentials 발급. 본 Secret 패턴은 임시

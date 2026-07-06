@@ -51,6 +51,7 @@ PSA enforce 적용 네임스페이스:
 - `build` → `privileged` (Kaniko 가 root + capability 요구)
 - `vault` → `baseline` (OpenBao 는 non-root + `disable_mlock` 운영, IPC_LOCK 불필요)
 - `tailscale` → `baseline` (userspace mode — `/dev/net/tun`/NET_ADMIN 불필요)
+- `core`/`batch`/`auth` → `restricted` (MSA 서비스 — `app`과 동일 정책)
 - `data` → `baseline` (Redis/Kafka 백킹 — non-root 운영, host 권한 불필요)
 - 그 외 인프라 NS → enforce 미적용 (ztunnel/istio-cni 권한 요구)
 
@@ -79,7 +80,7 @@ dev/staging/prod 멀티 네임스페이스 분리는 OCI Always Free 24GB RAM �
 enrollment은 opt-in + **무중단** — sidecar 주입과 달리 Pod 재시작/스펙 변경 없이 노드 레벨에서 기존 Pod를 캡처. PSA `restricted`와도 충돌 없음 (Pod에 추가 컨테이너가 안 붙음).
 
 - `app` → enrolled (워크로드 mTLS canary, 최초)
-- `core` → enrolled (MSA 동서 통신 mTLS — east-west AuthorizationPolicy 의 신원 기반)
+- `core`/`batch`/`auth` → enrolled (MSA 동서 통신 mTLS — east-west AuthorizationPolicy 의 신원 기반)
 - `cicd` → enrolled (ArgoCD `--insecure` 내부 hop 평문 해소)
 - `vault` → enrolled (OpenBao `tls_disable` 평문 hop 보호 — secret 경로 mTLS)
 - `data` → enrolled (app↔Redis/Kafka hop mTLS — 백킹 서비스 평문 hop 해소)
@@ -113,4 +114,4 @@ pod-security.kubernetes.io/audit: restricted
 
 ### MSA 서비스별 네임스페이스
 
-서비스당 1 NS. 단일 `app` NS 에 몰지 않는 사유: NetworkPolicy(L3/L4) 경계와 Istio AuthorizationPolicy `source.namespaces`(L7) 가 모두 NS 단위라, 동서(east-west) 격리를 NS 경계로 선언하면 정책이 단순하고 실수 여지가 준다. `app`(데모 워크로드)과도 분리 — 데모와 MSA 혼재 방지. 현재 `core` 만 실존(`restricted` + ambient enrolled) — `batch`/`auth` 는 매니페스트 준비 후 동일 정책으로 추가 예정.
+서비스당 1 NS. 단일 `app` NS 에 몰지 않는 사유: NetworkPolicy(L3/L4) 경계와 Istio AuthorizationPolicy `source.namespaces`(L7) 가 모두 NS 단위라, 동서(east-west) 격리를 NS 경계로 선언하면 정책이 단순하고 실수 여지가 준다. `app`(데모 워크로드)과도 분리 — 데모와 MSA 혼재 방지. `core`/`batch`/`auth` 모두 동일 정책(`restricted` + ambient enrolled)으로 실존 — 서비스 레이어(ArgoCD Application/매니페스트)의 실제 배포 진행도는 `core`/`batch` 적용 완료, `auth` 는 매니페스트 정리 후 추가(`k8s-gitops` 레포 소관, `../../platform/argocd/README.md` §6 참조).
