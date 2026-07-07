@@ -10,6 +10,7 @@ spec:
       oci.oraclecloud.com/load-balancer-type: "nlb"
       oci-network-load-balancer.oraclecloud.com/oci-network-load-balancer-shape: "flexible"
       oci-network-load-balancer.oraclecloud.com/oci-network-load-balancer-is-preserve-source: "true"
+      sidecar.istio.io/proxyCPU: "50m"
   listeners:
     - name: http
       port: 80

@@ -9,7 +9,7 @@ server:
 
   resources:
     requests:
-      cpu: 50m
+      cpu: 25m
       memory: 64Mi
     limits:
       memory: 128Mi
@@ -17,15 +17,15 @@ server:
 controller:
   resources:
     requests:
-      cpu: 100m
-      memory: 512Mi
+      cpu: 50m
+      memory: 768Mi
     limits:
       memory: 1Gi
 
 repoServer:
   resources:
     requests:
-      cpu: 50m
+      cpu: 25m
       memory: 128Mi
     limits:
       memory: 256Mi
@@ -33,7 +33,7 @@ repoServer:
 applicationSet:
   resources:
     requests:
-      cpu: 50m
+      cpu: 25m
       memory: 64Mi
     limits:
       memory: 128Mi
@@ -50,7 +50,7 @@ redis-ha:
 redis:
   resources:
     requests:
-      cpu: 50m
+      cpu: 25m
       memory: 32Mi
     limits:
       memory: 64Mi

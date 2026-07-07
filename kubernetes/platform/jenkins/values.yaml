@@ -1,7 +1,7 @@
 controller:
   resources:
     requests:
-      cpu: 200m
+      cpu: 100m
       memory: 1Gi
     limits:
       memory: 2Gi
@@ -228,7 +228,7 @@ agent:
                 image: docker.io/jenkins/inbound-agent:3327.v868139a_d00e0-3-jdk21
                 resources:
                   requests:
-                    cpu: 50m
+                    cpu: 25m
                     memory: 256Mi
                   limits:
                     memory: 512Mi
@@ -238,7 +238,7 @@ agent:
                 args: ["99d"]
                 resources:
                   requests:
-                    cpu: 200m
+                    cpu: 100m
                     memory: 1Gi
                   limits:
                     memory: 2Gi
