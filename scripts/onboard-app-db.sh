@@ -67,7 +67,7 @@ spec:
       command: ["sh", "-c"]
       args:
         - |
-          mysql -h "${DB_HOST}" -P "${DB_PORT}" -u admin --connect-timeout=10 --ssl-mode=REQUIRED -e "CREATE DATABASE IF NOT EXISTS ${DB_NAME}; CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${APP_PASSWORD}'; GRANT SELECT, INSERT, UPDATE, DELETE ON ${DB_NAME}.* TO '${DB_USER}'@'%'; FLUSH PRIVILEGES;"
+          mysql -h "${DB_HOST}" -P "${DB_PORT}" -u admin --connect-timeout=10 --ssl-mode=REQUIRED -e "CREATE DATABASE IF NOT EXISTS ${DB_NAME}; CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${APP_PASSWORD}'; GRANT CREATE, ALTER, INDEX, SELECT, INSERT, UPDATE, DELETE ON ${DB_NAME}.* TO '${DB_USER}'@'%'; FLUSH PRIVILEGES;"
       env:
         - name: MYSQL_PWD
           valueFrom:
