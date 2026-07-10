@@ -26,18 +26,22 @@ helm install argocd argo/argo-cd -n cicd --version "~7.7.0" -f values.yaml --wai
 kubectl apply -f httproute.yaml
 ```
 
-초기 admin 비밀번호 (chart가 자동 생성한 `argocd-initial-admin-secret` 사용 → 변경 후 삭제):
+admin 비밀번호 고정 (chart 랜덤 생성 회피 — 클러스터 재구축·pod 재기동과 무관하게 동일 자격증명 유지). `argocd-secret` 의 `admin.password` 는 bcrypt 해시 — chart values 에 해시를 박으면 공개 git 레포에 남으므로, 실 자격증명은 git 밖에 두고 부트스트랩 시 kubectl 로 주입한다 (Jenkins `existingSecret: jenkins-admin-fixed` 와 동일 철학, §4 참조):
 
 ```bash
-kubectl -n cicd get secret argocd-initial-admin-secret \
-  -o jsonpath='{.data.password}' | base64 -d ; echo
+# 1. 원하는 비밀번호의 bcrypt 해시 생성 (argocd CLI)
+#    CLI 미설치 시: htpasswd -nbBC 10 "" '<your-password>' | tr -d ':\n' | sed 's/$2y/$2a/'
+BCRYPT=$(argocd account bcrypt --password '<your-password>')
 
-# tailnet 경유 http://<argocd-server ClusterIP> 접속 후
-# (public httproute 는 주석 처리 — 재활성 시 https://argocd.ggang.cloud)
-# admin / <위 출력> 로 로그인 → Settings에서 비밀번호 변경
+# 2. argocd-secret 에 주입 (admin.passwordMtime 갱신 → 기존 발급 JWT 무효화)
+kubectl -n cicd patch secret argocd-secret \
+  -p "{\"stringData\": {\"admin.password\": \"${BCRYPT}\", \"admin.passwordMtime\": \"$(date +%FT%T%Z)\"}}"
 
-kubectl -n cicd delete secret argocd-initial-admin-secret
+# 3. chart 가 부팅 시 생성한 랜덤 초기 비번(이제 stale) 제거
+kubectl -n cicd delete secret argocd-initial-admin-secret --ignore-not-found
 ```
+
+`argocd-server` 는 `argocd-secret` 을 informer 로 실시간 감시 → patch 즉시 반영, 재시작 불요. 이후 tailnet 경유 `http://<argocd-server ClusterIP>` (public httproute 재활성 시 `https://argocd.ggang.cloud`) 에서 `admin` / `<your-password>` 로 로그인.
 
 ## 3. 검증
 
@@ -82,6 +86,15 @@ SSO 도입 turn 에서 `dex.enabled: true` + GitHub OAuth 활성, `admin` user �
 - `notifications.enabled: false` — Slack/email 연동 turn 에 활성
 - `redis-ha.enabled: false` — single Redis. controller HA 불필요 (Always Free 24GB RAM 우선)
 
+### admin 비밀번호 고정 — values(git) 대신 imperative patch
+
+Jenkins 는 `existingSecret: jenkins-admin-fixed` 로 실 자격증명을 git 밖에 두고 참조한다. ArgoCD 는 admin 비번을 임의 Secret 으로 지정하는 지시자가 없고 반드시 `argocd-secret` 의 `admin.password`(bcrypt) 에 살아야 한다. 고정 방법은 둘:
+
+- **(A) `configs.secret.argocdServerAdminPassword` + `...Mtime` 를 values 에 박기** — 선언적이나 bcrypt 해시가 공개 레포에 남는다. mtime 미고정 시 chart 가 `now()` 로 렌더해 매 sync 마다 churn.
+- **(B) 부트스트랩 때 `argocd-secret` 을 kubectl patch** (§2 채택) — 실 자격증명 git 밖. Jenkins 패턴과 동형.
+
+**(B) 채택.** 공개 포트폴리오 레포라 해시라도 offline brute-force 표면을 남기지 않음 + Jenkins 선례와 일관. self-manage sync 가 patch 필드를 덮지 않는 근거: chart `argocd-secret.yaml`(7.7.23) 은 `argocdServerAdminPassword` 가 빈 값이면 `admin.password` 키를 렌더하지 않고, Secret 에 `helm.sh/hook`/`resource-policy` 어노테이션이 없으며, `argocd.yaml` 이 `ServerSideApply=true` + prune/automated 미설정(adopt 단계)이라 렌더 대상이 아닌 필드는 유지된다. 향후 Vault Agent Injector / ESO 로 이관 시 (A)/(B) 모두 대체.
+
 ### 리소스 핀
 
 총 ~544Mi (controller 256 + repo 128 + server 64 + appset 64 + redis 32). Always Free 분배 (Vault + Prometheus 우선) 에 맞춰 tight 설정.
@@ -98,9 +111,9 @@ helm search repo argo/argo-cd --versions | head -5
 
 CHANGELOG 에서 breaking change 확인 (특히 6.x → 7.x, 7.x → 8.x).
 
-### admin Secret 회전
+### admin 비밀번호 고정 / 회전
 
-`argocd-initial-admin-secret` 은 plain text. 변경 → 삭제까지 1회 절차. SSO 도입 turn 에 `admin` 사용자 비활성화 + role 기반 접근으로 전환.
+chart 가 부팅 시 만드는 `argocd-initial-admin-secret` 은 plain text 랜덤값 — 클러스터 재구축마다 바뀐다. §2 절차로 `argocd-secret` 의 `admin.password`(bcrypt) 를 알려진 고정값으로 patch 하면 재구축·재기동과 무관하게 동일 비번 유지. 비번을 바꿀 땐 같은 patch 를 새 해시로 재실행하면 되고, `admin.passwordMtime` 갱신으로 기존 발급 JWT 가 무효화된다. SSO 도입 turn 에 `admin` 사용자 비활성화 + role 기반 접근으로 전환.
 
 ### reconciliation 주기
 

@@ -64,12 +64,12 @@ Jenkins는 `app` NS 권한 0건 — k8s API 직접 호출 ❌, git commit만. Ar
 
 ## 6. Secret
 
-- `argocd-initial-admin-secret` — argo/argo-cd chart 자동 생성 (변경 후 삭제)
+- `argocd-secret` (`admin.password`) — argo/argo-cd chart 생성. admin 비번 고정을 위해 bcrypt 해시로 patch (git 밖 — chart 랜덤 생성 회피, `jenkins-admin-fixed` 와 동일 철학). chart 부팅 시 만드는 `argocd-initial-admin-secret`(랜덤) 은 patch 후 삭제
 - `jenkins-admin-fixed` — Jenkins admin 고정 자격, `cicd` NS (`existingSecret` — chart 랜덤 생성 회피)
 - `jenkins-git-pat` — manifest bump 용 git PAT, `cicd` NS (key `token` → `containerEnv` `GIT_PAT` → JCasC `github-token` credential)
 - `ghcr-push` — Kaniko GHCR push 자격, `build` NS (`kubernetes.io/dockerconfigjson`)
 
-`argocd-initial-admin-secret` 외 3종은 `kubectl create secret` 직접 생성. OpenBao 설치 완료 — Cloudflare / GHCR / DB / PAT 시크릿의 OpenBao 이관(Agent Injector / ESO 비교 포함)은 후속 turn.
+`argocd-secret` admin patch(§argocd/README.md 2·4장) 포함 위 시크릿은 `kubectl` 로 직접 주입/생성. OpenBao 설치 완료 — Cloudflare / GHCR / DB / PAT 시크릿의 OpenBao 이관(Agent Injector / ESO 비교 포함)은 후속 turn.
 
 placeholder · helm 버전 핀 · 5섹션 README 구조 등 공통 컨벤션은 `../infra/README.md` 참조.
 
