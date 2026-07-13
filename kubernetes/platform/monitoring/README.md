@@ -9,6 +9,7 @@
 ## 1. 전제 조건
 
 - `monitoring` 네임스페이스 + PSA `enforce=baseline` (`../../infra/namespaces/`)
+- `grafana-admin-fixed` Secret 선존재 (`monitoring` NS) — Grafana admin 고정 자격. `values.yaml` `grafana.admin.existingSecret` 이 참조하므로 미존재 시 Grafana pod 가 `secretKeyRef` 로 기동 실패 (§2)
 - Grafana 외부 노출용: `public-gateway` `https-wildcard` listener + wildcard TLS Secret `public-wildcard-tls` Ready (`../../infra/istio/`, `../../infra/cert-manager/`)
 - external-dns 동작 — HTTPRoute hostname → Cloudflare DNS (`../../infra/external-dns/`)
 - Helm 3.6+
@@ -25,16 +26,23 @@
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
 
+# Grafana admin 자격 고정 (chart 기본 자동 관리 회피 — helm/sync 재렌더와 무관하게 동일 자격 유지,
+# Jenkins jenkins-admin-fixed 와 동일 패턴). values.yaml grafana.admin.existingSecret 가 이걸 참조
+kubectl create secret generic grafana-admin-fixed \
+  --from-literal=admin-user=admin \
+  --from-literal=admin-password='<your-password>' \
+  -n monitoring
+
 helm install kps prometheus-community/kube-prometheus-stack \
   -n monitoring --version "~75.0.0" -f values.yaml --wait
 
 kubectl apply -f httproute.yaml
 ```
 
-Grafana admin 비밀번호 (chart 자동 생성):
+admin 자격은 `grafana.admin.existingSecret: grafana-admin-fixed` 로 고정 (`values.yaml`). chart 는 `admin.existingSecret` 이 지정되면 자체 admin Secret 을 만들지 않고 이 Secret 을 `GF_SECURITY_ADMIN_USER/PASSWORD` 로 주입 → pod 재기동·helm upgrade·ArgoCD sync 와 무관하게 동일 자격 유지 (chart 미지정 시엔 chart 가 `grafana` Secret 을 스스로 관리 = 사용자 고정값 아님):
 
 ```bash
-kubectl -n monitoring get secret grafana \
+kubectl -n monitoring get secret grafana-admin-fixed \
   -o jsonpath='{.data.admin-password}' | base64 -d ; echo
 # tailnet 경유 http://<grafana ClusterIP> → admin / <위 출력>  (public httproute 는 주석 처리)
 ```
@@ -69,6 +77,13 @@ PSA `baseline`은 호스트 네임스페이스(hostNetwork)를 금지. `hostNetw
 ### Grafana 외부 노출 — Gateway 단일 TLS 종료
 argocd 패턴 동일. Grafana는 ClusterIP HTTP, `public-gateway`가 `*.ggang.cloud` 와일드카드로 TLS 종료. mesh 내부는 Istio Ambient L4 mTLS.
 
+### Grafana admin 비밀번호 고정 — `existingSecret` (Jenkins 패턴)
+`grafana.admin.existingSecret: grafana-admin-fixed`. grafana chart 는 `adminUser`/`adminPassword` 미지정 시 admin 자격을 스스로 `grafana` Secret 에 넣어(고정값 아님) 관리하고, kps 는 ArgoCD 멀티소스로 values 를 git 에서 읽어 매 sync 재렌더한다 → 사용자가 통제하는 고정 자격이 아님. Jenkins `jenkins-admin-fixed` 와 동형으로, 실 자격은 git 밖 `kubectl create secret` 으로 만들고 values 엔 **Secret 이름 포인터만** 둔다. chart 는 `admin.existingSecret` 이 있으면 자체 Secret 을 렌더하지 않고 이 Secret 을 참조하므로, 비번은 공개 레포에 남지 않고 재렌더·재기동과 무관하게 유지.
+
+`adminPassword` 를 values 에 평문/bcrypt 로 박는 방식은 공개 포트폴리오 레포에 자격이 남아 비채택 (argocd 결정과 동일 논리 — `../argocd/README.md` §4 참조). `userKey`/`passwordKey` 기본값(`admin-user`/`admin-password`)에 맞춰 Secret 키 구성. 향후 OpenBao/ESO 이관 시 대체.
+
+출처: grafana chart `values.yaml` `admin.existingSecret`/`userKey`/`passwordKey` (grafana-community/helm-charts, 조회 2026-07-10 — grafana/helm-charts 는 2026-01-30 이 repo 로 이관).
+
 ### 스토리지 — Prometheus 영속 PV (oci-bv 50Gi)
 Prometheus 는 장기 메트릭 저장소(Thanos) 없는 단독 보관소 → 재시작마다 history 소실은 비용 과다. Always Free Block Volume 한도(부트 ×2 + PV ×2 = 4볼륨 / 총 200GB)의 PV 2칸 우선순위 = **Vault, Prometheus**. `storageSpec.volumeClaimTemplate` 로 `oci-bv` 50Gi 동적 프로비저닝, retention `15d` / retentionSize `45GiB`(디스크 full 전 prune 가드). Grafana/Alertmanager 는 ephemeral 유지(대시보드=코드, 알림 상태는 짧은 보존이라 손실 허용). Loki(오브젝트 스토리지) / Tempo(emptyDir) 후속과 정합.
 
@@ -83,8 +98,18 @@ major를 자주 올림 — upgrade 전 CHANGELOG breaking change 확인. CRD는 
 ### Prometheus 디스크 / OOM
 `retentionSize 45GiB` < PV `50Gi` — 디스크 full 전에 prune. 시계열 급증으로 디스크 압박 시 retention 단축. mem 압박은 `resources.limits.memory` 상향 — 메모리는 active series·쿼리 기준이라 디스크 retention 과 별개. PVC 는 `volumeClaimTemplate` 이라 STS 재생성 시에도 유지(블록볼륨 한도 = 부트 2 + PV 2 고정).
 
-### Grafana admin Secret 회전
-`grafana` Secret 평문 base64. 최초 로그인 후 변경. OpenBao 이관 후보.
+### Grafana admin 비밀번호 고정 / 회전
+admin 자격은 `grafana.admin.existingSecret: grafana-admin-fixed` 로 고정 (§2·§4). 비번 변경 시 이 Secret 을 갱신 후 grafana pod 재기동:
+
+```bash
+kubectl -n monitoring create secret generic grafana-admin-fixed \
+  --from-literal=admin-user=admin \
+  --from-literal=admin-password='<new-password>' \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n monitoring rollout restart deploy grafana
+```
+
+`existingSecret` 지정 후 chart 는 기존 `grafana` Secret 의 admin 자격을 더 이상 렌더하지 않는다 — 컷오버 후 남는 구 `grafana` Secret 은 미사용(무해, 정리 원하면 삭제 가능). 자격 평문 base64 는 여전 → OpenBao/ESO 이관 후보.
 
 ### metrics-server 별도
 HPA(CPU/메모리)·`kubectl top`은 이 스택이 아니라 metrics-server(`metrics.k8s.io`)가 담당 — `../../infra/metrics-server/`. 보유 여부: `kubectl get deploy -n kube-system metrics-server`.

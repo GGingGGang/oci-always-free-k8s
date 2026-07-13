@@ -36,6 +36,10 @@ alertmanager:
 
 grafana:
   fullnameOverride: grafana
+  admin:
+    existingSecret: grafana-admin-fixed
+    userKey: admin-user
+    passwordKey: admin-password
   service:
     type: ClusterIP
   persistence:

@@ -66,6 +66,7 @@ Jenkins는 `app` NS 권한 0건 — k8s API 직접 호출 ❌, git commit만. Ar
 
 - `argocd-secret` (`admin.password`) — argo/argo-cd chart 생성. admin 비번 고정을 위해 bcrypt 해시로 patch (git 밖 — chart 랜덤 생성 회피, `jenkins-admin-fixed` 와 동일 철학). chart 부팅 시 만드는 `argocd-initial-admin-secret`(랜덤) 은 patch 후 삭제
 - `jenkins-admin-fixed` — Jenkins admin 고정 자격, `cicd` NS (`existingSecret` — chart 랜덤 생성 회피)
+- `grafana-admin-fixed` — Grafana admin 고정 자격, `monitoring` NS (`grafana.admin.existingSecret` — chart 자체 관리 회피, keys `admin-user`/`admin-password`)
 - `jenkins-git-pat` — manifest bump 용 git PAT, `cicd` NS (key `token` → `containerEnv` `GIT_PAT` → JCasC `github-token` credential)
 - `ghcr-push` — Kaniko GHCR push 자격, `build` NS (`kubernetes.io/dockerconfigjson`)
 
