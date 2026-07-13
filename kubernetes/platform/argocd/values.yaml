@@ -18,9 +18,9 @@ controller:
   resources:
     requests:
       cpu: 50m
-      memory: 768Mi
-    limits:
       memory: 1Gi
+    limits:
+      memory: 1.5Gi
 
 repoServer:
   resources:
