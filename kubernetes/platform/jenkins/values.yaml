@@ -255,12 +255,18 @@ agent:
                 image: docker.io/aquasec/trivy:0.72.0
                 command: ["sleep"]
                 args: ["99d"]
+                env:
+                  - name: DOCKER_CONFIG
+                    value: /trivy/.docker
                 resources:
                   requests:
                     cpu: 100m
                     memory: 256Mi
                   limits:
                     memory: 512Mi
+                volumeMounts:
+                  - name: docker-config
+                    mountPath: /trivy/.docker
             volumes:
               - name: docker-config
                 projected:
