@@ -252,7 +252,7 @@ agent:
                   - name: docker-config
                     mountPath: /kaniko/.docker
               - name: trivy
-                image: aquasec/trivy:0.72.0
+                image: docker.io/aquasec/trivy:0.72.0
                 command: ["sleep"]
                 args: ["99d"]
                 resources:
