@@ -252,6 +252,22 @@ pipeline {
 
 `kanikoBuild`/`deployBump` 상세 파라미터는 `jenkins-shared-library/README.md` 참조.
 
+### Trivy 컨테이너 + HTML 리포트 게시 — `agent.podTemplates.kaniko` 확장
+
+같은 pod 에 `trivy`(`aquasec/trivy`, kaniko 와 동일하게 `sleep 99d` 로 유지) 컨테이너 추가. 별도 volume mount 불필요(취약점 DB 는 이미지 자체 캐시 + 인터넷 아웃바운드로 스캔 시점에 갱신) — kaniko 처럼 GHCR 인증이 필요 없는 이유는 이미지 자체가 아니라 스캔 결과만 다루기 때문.
+
+- **`installPlugins`에 `htmlpublisher` 추가 필요** — `publishHTML` 스텝 제공.
+- **`controller.javaOpts` 로 CSP 완화 필요**: Jenkins 기본 `hudson.model.DirectoryBrowserSupport.CSP`(`default-src 'none'`)는 아카이브/HTML Publisher 가 서빙하는 정적 페이지에서 인라인 `<style>`/`<script>` 를 전부 막는다. trivy 공식 HTML 템플릿(`jenkins-shared-library/resources/trivy/html.tpl`)이 인라인 스타일 + 인라인 스크립트(정렬/토글용, 외부 CDN 참조 없음 — 체크인 전 직접 확인)만 쓰므로, 전면 비활성화 대신 `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self'` 로 좁혀서 완화.
+- 스캔/HTML 변환/게시 로직은 shared library `trivyImageScan` step 이 내부적으로 조립 (`jenkins-shared-library/vars/trivyImageScan.groovy`, 파라미터는 `jenkins-shared-library/README.md` 참조). Jenkinsfile 은 다음처럼 한 스테이지만 추가하면 됨:
+
+```groovy
+stage('Image Scan') {
+  steps {
+    trivyImageScan(image: env.IMAGE, tag: env.TAG)
+  }
+}
+```
+
 ### JCasC seed — 환경변수 · 자격증명 · 라이브러리 · 잡
 
 `JCasC.configScripts` 가 다섯 조각으로 분리:

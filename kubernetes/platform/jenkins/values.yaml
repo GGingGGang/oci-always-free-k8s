@@ -31,6 +31,11 @@ controller:
 
   numExecutors: 0
 
+  # publishHTML(Trivy report)이 인라인 <style>/<script>를 쓰므로 기본 CSP(default-src 'none')로는 렌더 안 됨.
+  # 외부 리소스는 여전히 차단 — trivy html.tpl 자체가 CDN 참조 없음(체크인된 템플릿 확인됨).
+  javaOpts: >-
+    -Dhudson.model.DirectoryBrowserSupport.CSP="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self'"
+
   containerEnv:
     - name: GH_ORG
       value: GGingGGang
@@ -64,6 +69,7 @@ controller:
     - github-api:1.330-492.v3941a_032db_2a_
     - github-branch-source:1967.1969.v205fd594c821
     - gson-api:2.13.2-173.va_a_092315913c
+    - htmlpublisher:427.1
     - instance-identity:203.v15e81a_1b_7a_38
     - ionicons-api:94.vcc3065403257
     - jackson2-api:2.19.0-404.vb_b_0fd2fea_e10
@@ -245,6 +251,16 @@ agent:
                 volumeMounts:
                   - name: docker-config
                     mountPath: /kaniko/.docker
+              - name: trivy
+                image: aquasec/trivy:0.72.0
+                command: ["sleep"]
+                args: ["99d"]
+                resources:
+                  requests:
+                    cpu: 100m
+                    memory: 256Mi
+                  limits:
+                    memory: 512Mi
             volumes:
               - name: docker-config
                 projected:
