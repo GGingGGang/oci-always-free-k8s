@@ -274,7 +274,7 @@ stage('Image Scan') {
 
 - **`cosign-key` Secret 마운트** — `build` NS 의 Secret(key `cosign.key`+`password`)을 `/cosign/key` 로 마운트. 개인키는 파일(`cosign.key`), 비밀번호는 `COSIGN_PASSWORD` env(`secretKeyRef`)로 주입 — Jenkinsfile/스텝이 비번을 직접 다루지 않음.
 - **digest 기준 서명** — `kanikoBuild` 가 `--digest-file` 로 기록한 push 이미지 digest 를 읽어 `cosign sign <image>@<digest>` 실행. 태그가 아닌 불변 digest 로 서명.
-- **`--tlog-upload=false`** — 공개 Rekor 미사용(self-contained). 검증(Kyverno)도 tlog 무시로 맞춰야 함.
+- **tlog/TSA 미사용(self-contained)** — cosign v3 는 `--tlog-upload` 대신 signing config 로 지정. rekor/TSA 항목 없는 config 가 shared library 리소스(`resources/cosign/signing-config.json`)로 체크인돼 서명 시 공개 인프라 호출 없음. 검증(Kyverno)도 tlog 무시로 맞춰야 함.
 - 서명 로직은 shared library `cosignSign` step 이 조립 (`jenkins-shared-library/vars/cosignSign.groovy`). Jenkinsfile 은 한 스테이지만 추가:
 
 ```groovy
