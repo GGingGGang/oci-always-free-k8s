@@ -42,7 +42,7 @@ OKE 클러스터의 기반 인프라 계층. 네임스페이스/PSA, Gateway API
 
 - **OCI** — OKE 클러스터, Network Load Balancer (Gateway API → istio가 자동 프로비전)
 - **Cloudflare** — 도메인 zone (DNS 관리 + ACME DNS-01 challenge)
-- **helm registries** — `jetstack`, `kubernetes-sigs/external-dns`, `istio-release`
+- **helm registries** — `jetstack`, `kubernetes-sigs/external-dns`, `kubernetes-sigs/metrics-server`, `istio-release`
 
 Cloudflare API Token은 컴포넌트별 분리 발급 권장 (cert-manager/external-dns 각각). 사고 시 폭발 반경 최소화.
 
@@ -64,6 +64,7 @@ kubectl create secret generic cloudflare-api-token \
 |------|------|
 | `<your-cf-token>` | Cloudflare API Token (Secret 생성 시) |
 | `<your-github-user>` / `<your-ghcr-write-token>` | GHCR push 자격 (Jenkins 빌드용 Secret 생성 시) |
+| `<your-tskey-auth-...>` | Tailscale auth key (`tailscale-auth` Secret 생성 시) |
 
 ### 비밀값
 

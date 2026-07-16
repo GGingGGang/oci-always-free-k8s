@@ -27,7 +27,7 @@ kubectl -n default create secret generic db-smoketest-creds \
 unset DB_PASSWORD
 ```
 
-> admin user 이름은 Terraform `variables.tf` 의 `admin_username` default 값 (`admin`). 변경했다면 그 값으로.
+> admin user 이름은 `terraform/modules/database/variables.tf` 의 `admin_username` default 값 (`admin`). 변경했다면 그 값으로.
 
 ### 2-2. Pod 배포
 

@@ -148,4 +148,4 @@ prod issuer로 처음 발급 시도 전에 staging으로 1차 검증. prod 발�
 
 ### Secret 관리 — Vault 이관 예정
 
-Cloudflare token은 현재 `kubectl create secret`으로 직접 생성. 추후 OpenBao(Vault) 도입 시 Vault Agent Injector + Cloudflare token rotation 자동화로 이관.
+Cloudflare token은 현재 `kubectl create secret`으로 직접 생성. OpenBao 도입 완료(`../../platform/openbao/`) — 후속 turn 에서 Vault Agent Injector + Cloudflare token rotation 자동화로 이관.

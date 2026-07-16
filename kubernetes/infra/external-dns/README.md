@@ -103,7 +103,7 @@ values.yaml에 도메인을 박지 않고 설치 시 `--set domainFilters[0]=...
 
 ### Secret 관리 — k8s Secret 직접, Vault 이관 예정
 
-본 단계는 `kubectl create secret`으로 직접 생성. 추후 OpenBao(Vault) 도입 시 Vault Agent Injector로 token rotation 자동화 + 정적 Secret 제거.
+본 단계는 `kubectl create secret`으로 직접 생성. OpenBao 도입 완료(`../../platform/openbao/`) — 후속 turn 에서 Vault Agent Injector로 token rotation 자동화 + 정적 Secret 제거.
 
 ## 5. 주의 사항
 

@@ -1,6 +1,6 @@
 # terraform
 
-OCI 인프라 프로비저닝. VCN, OKE Basic Cluster, ARM Always Free 노드 풀, HeatWave MySQL Free, KMS (OpenBao auto-unseal), IAM (NSG / Dynamic Group / Policy).
+OCI 인프라 프로비저닝. VCN, OKE Basic Cluster, ARM Always Free 노드 풀, HeatWave MySQL Free, KMS (OpenBao auto-unseal), IAM (NSG / Dynamic Group / Policy), Object Storage.
 
 ## 1. 전제 조건
 
@@ -143,7 +143,7 @@ default `v1.34.2`가 리전에서 미지원일 수 있음. 적용 전 `oci ce cl
 terraform {
   backend "s3" {  # OCI Object Storage S3 호환
     bucket   = "<your-state-bucket>"
-    key      = "oci-terraform.tfstate"
+    key      = "oci-always-free-k8s.tfstate"
     region   = "<your-region>"
     endpoint = "https://<namespace>.compat.objectstorage.<region>.oraclecloud.com"
   }

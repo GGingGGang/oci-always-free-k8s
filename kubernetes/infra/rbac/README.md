@@ -173,11 +173,11 @@ OSS 정신 + audit narrative. 필수 아님.
 
 infra 단계엔 *적용 대상 SA가 미존재* (ArgoCD/Jenkins/Prometheus 등 미설치). 그래서 본 폴더는 *설계 문서만*. 실 YAML은 *컴포넌트 도입 시 함께* (`platform/<comp>/rbac.yaml`).
 
-ArgoCD의 경우 *helm install 시 chart default RBAC 생성됨* → 본 매니페스트로 *override*. 순서:
+ArgoCD/Prometheus 처럼 chart 가 default RBAC 를 생성하는 컴포넌트는 현재 chart 기본을 그대로 사용(§개요). 커스텀 RBAC 로 override 하게 되면 순서:
 1. helm install (chart default SA + RBAC 생성)
 2. `kubectl apply -f rbac.yaml` (chart default 덮어쓰기 또는 보강)
 
-본 컨벤션 정합한 SA name (`<component>`) 을 helm values에서 *명시*해 chart가 그 이름으로 SA 생성하게 강제.
+본 컨벤션 정합한 SA name (`<component>`) 을 helm values에서 *명시*해 chart가 그 이름으로 SA 생성하게 강제. (Jenkins 는 `serviceAccount.create: false` + `rbac.create: false` 로 chart RBAC 자체를 끄고 `platform/jenkins/rbac.yaml` 만 사용 — 적용된 사례.)
 
 ### RBAC 변경 시 영향 범위
 

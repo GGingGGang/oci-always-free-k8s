@@ -14,7 +14,7 @@ Gateway API v1.5.0 standard channel CRD. Istio (`base`/Gateway 컨트롤러), ce
 kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.0/standard-install.yaml
 ```
 
-CRD 9개 + ValidatingAdmissionPolicy 1개 설치:
+CRD 8개 + ValidatingAdmissionPolicy 1개 설치:
 
 - `gatewayclasses`, `gateways`, `httproutes`, `grpcroutes`, `tlsroutes`
 - `backendtlspolicies`, `referencegrants`, `listenersets`

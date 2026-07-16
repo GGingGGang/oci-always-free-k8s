@@ -15,6 +15,8 @@ kubernetes/
 │   ├── external-dns/     # HTTPRoute hostnames → Cloudflare DNS
 │   ├── cert-manager/     # LE DNS-01 + 와일드카드 Certificate
 │   ├── metrics-server/   # metrics.k8s.io (kubectl top / HPA)
+│   ├── tailscale/        # subnet router — 관리 플레인 사설화 (tailnet)
+│   ├── rbac/             # RBAC 설계 문서 (실 YAML은 각 컴포넌트 폴더 동거)
 │   └── README.md         # 전체 그림 + 설치 순서
 ├── platform/             # CI/CD · 관측 · 보안 등 플랫폼 컴포넌트
 │   ├── argocd/           # GitOps 컨트롤 플레인 (helm + HTTPRoute)
@@ -33,7 +35,7 @@ kubernetes/
 
 ## 적용 모델
 
-helm install + `kubectl apply` 수동(멱등) 흐름이 cold-start / DR 복구 자산으로 유지되며, 이와 별개로 본 레포(인프라)는 self-managed Application + 기존 helm release adopt 구조로 **전환 완료**(`platform/argocd/apps/*.yaml`) — 단 adopt 단계는 수동 sync + prune off, selfHeal/prune 활성은 하드닝 turn. 앱 sync 는 별도 GitOps 레포(`k8s-gitops`) 대상 — config vs source code 분리 원칙 유지. 상세는 `platform/argocd/README.md` §6.
+helm install + `kubectl apply` 수동(멱등) 흐름이 cold-start / DR 복구 자산으로 유지되며, 이와 별개로 본 레포(인프라)는 self-managed Application + 기존 helm release adopt 구조로 **전환 완료**(`platform/argocd/apps/*.yaml`) — 단 adopt 단계는 수동 sync + prune off, selfHeal/prune 활성은 하드닝 turn. 앱 sync 는 별도 GitOps 레포([`k8s-gitops`](https://github.com/GGingGGang/k8s-gitops)) 대상 — config vs source code 분리 원칙 유지. 상세는 `platform/argocd/README.md` §6.
 
 ## 앱 매니페스트 위치
 
@@ -41,9 +43,9 @@ helm install + `kubectl apply` 수동(멱등) 흐름이 cold-start / DR 복구 �
 
 사유: ArgoCD 공식 권장 *config vs source code 분리* + 인프라/앱 권한 경계 + commit log 오염 방지.
 
-> 결정: deploy 전용 레포 분리 — 매니페스트를 `k8s-gitops/manifests/<svc>` 로 이전. Jenkins 는 앱 main 이 아니라 `k8s-gitops` 에 bump(shared library `deployBump`) → 앱 레포 main 무오염, `k8s-gitops` 는 org folder(`svc-.*`) 밖이라 빌드 루프 없음(`[ci skip]` 불필요). `core`/`batch` 적용 완료, `auth` 는 매니페스트 정리 후 동일 이전.
+> 결정: deploy 전용 레포 분리 — 매니페스트를 `k8s-gitops/manifests/<svc>` 로 이전. Jenkins 는 앱 main 이 아니라 `k8s-gitops` 에 bump(shared library `deployBump`) → 앱 레포 main 무오염, `k8s-gitops` 는 org folder(`svc-.*`) 밖이라 빌드 루프 없음(`[ci skip]` 불필요). `core`/`batch`/`auth` 이전 완료.
 
 ## 예정 추가
 
 - `platform/` — argocd, jenkins, openbao, monitoring, 데이터 계층(redis/kafka, `data` NS) 도입 완료. 관측 후속(Loki / Alloy / Tempo / Kiali) 예정
-- 앱 레이어(app-of-apps)는 전용 GitOps 레포(`k8s-gitops`)로 분리 — `core`/`batch` Application + 매니페스트 이전 완료. 후속 `auth` 동일 이전 + east-west 메시(NetworkPolicy/AuthorizationPolicy)
+- 앱 레이어(app-of-apps)는 전용 GitOps 레포(`k8s-gitops`)로 분리 — `core`/`batch`/`auth` Application + 매니페스트 이전 완료. 후속 east-west 메시(NetworkPolicy/AuthorizationPolicy)

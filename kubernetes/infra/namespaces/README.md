@@ -26,6 +26,7 @@ kubectl apply -f namespaces.yaml
 | `tailscale` | Tailscale subnet router (PSA `enforce=baseline`) |
 | `app` | 워크로드 (PSA `enforce=restricted`, Istio ambient enrolled) |
 | `core` | MSA 도메인 API 서비스 (PSA `enforce=restricted`, Istio ambient enrolled) |
+| `batch` | MSA 도메인 batch 서비스 (PSA `enforce=restricted`, Istio ambient enrolled) |
 | `auth` | MSA 도메인 auth API 서비스 (PSA `enforce=restricted`, Istio ambient enrolled) |
 | `data` | 백킹 데이터 서비스 — Redis, Kafka(Strimzi) (PSA `enforce=baseline`, Istio ambient enrolled) |
 
@@ -106,7 +107,7 @@ pod-security.kubernetes.io/warn: restricted
 pod-security.kubernetes.io/audit: restricted
 ```
 
-현재 매니페스트는 `enforce` + `warn` 모두 박힘.
+현재 매니페스트는 `enforce` + `warn` 모두 박힘 (`build` 는 `enforce` 만 — privileged NS 에 restricted warn 은 노이즈).
 
 ### 신규 네임스페이스 추가
 
@@ -114,4 +115,4 @@ pod-security.kubernetes.io/audit: restricted
 
 ### MSA 서비스별 네임스페이스
 
-서비스당 1 NS. 단일 `app` NS 에 몰지 않는 사유: NetworkPolicy(L3/L4) 경계와 Istio AuthorizationPolicy `source.namespaces`(L7) 가 모두 NS 단위라, 동서(east-west) 격리를 NS 경계로 선언하면 정책이 단순하고 실수 여지가 준다. `app`(데모 워크로드)과도 분리 — 데모와 MSA 혼재 방지. `core`/`batch`/`auth` 모두 동일 정책(`restricted` + ambient enrolled)으로 실존 — 서비스 레이어(ArgoCD Application/매니페스트)의 실제 배포 진행도는 `core`/`batch` 적용 완료, `auth` 는 매니페스트 정리 후 추가(`k8s-gitops` 레포 소관, `../../platform/argocd/README.md` §6 참조).
+서비스당 1 NS. 단일 `app` NS 에 몰지 않는 사유: NetworkPolicy(L3/L4) 경계와 Istio AuthorizationPolicy `source.namespaces`(L7) 가 모두 NS 단위라, 동서(east-west) 격리를 NS 경계로 선언하면 정책이 단순하고 실수 여지가 준다. `app`(데모 워크로드)과도 분리 — 데모와 MSA 혼재 방지. `core`/`batch`/`auth` 모두 동일 정책(`restricted` + ambient enrolled)으로 실존 — 서비스 레이어(ArgoCD Application/매니페스트)는 세 서비스 모두 적용 완료(`k8s-gitops` 레포 소관, `../../platform/argocd/README.md` §6 참조).

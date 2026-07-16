@@ -13,7 +13,7 @@ GitOps 컨트롤 플레인. helm install + HTTPRoute 외부 노출 + self-manage
 - wildcard TLS Secret `public-wildcard-tls` Ready (`../../infra/cert-manager/`)
 - external-dns 동작 (`../../infra/external-dns/`) — HTTPRoute hostname → Cloudflare DNS 자동 sync
 - Helm 3.6+
-- 권장 버전: argo/argo-cd chart `~7.x` (작성 시점 추론, 설치 전 `helm search repo argo/argo-cd --versions` 로 stable 확인 — 2년 안쪽 변동 가능)
+- 권장 버전: argo/argo-cd chart `~7.7.0` (ArgoCD `argocd` Application 은 `7.7.23` 핀). 설치 전 `helm search repo argo/argo-cd --versions` 로 stable 확인
 
 ## 2. 설치
 
@@ -99,7 +99,7 @@ Jenkins 는 `existingSecret: jenkins-admin-fixed` 로 실 자격증명을 git �
 
 총 ~1312Mi (controller 1024 + repo 128 + server 64 + appset 64 + redis 32). Always Free 분배 (Vault + Prometheus 우선) 에 맞춰 tight 설정.
 
-2026-07-13: controller가 옛 768Mi request / 1Gi limit 근처(실사용 990~1003Mi)에서 GC 압박으로 `readinessProbe`(`/healthz`, `timeoutSeconds: 1`) 간헐 실패(11h+ 지속) → request/limit을 1Gi/1.5Gi로 상향. 파드가 뜬 노드 기준 requests/limits 여유 충분해 상향 부담 없음(자세한 근거는 `Private-docs/decision/2026-07-13.md`).
+controller가 옛 768Mi request / 1Gi limit 근처(실사용 990~1003Mi)에서 GC 압박으로 `readinessProbe`(`/healthz`, `timeoutSeconds: 1`) 간헐 실패(11h+ 지속) → request/limit을 1Gi/1.5Gi로 상향. 파드가 뜬 노드 기준 requests/limits 여유 충분해 상향 부담 없음.
 
 ## 5. 주의 사항
 
@@ -154,12 +154,14 @@ argocd/
     ├── kps.yaml                 (helm) + monitoring-httproute.yaml (raw)
     ├── jenkins.yaml             (helm) + jenkins-rbac.yaml / jenkins-httproute.yaml (raw)
     ├── argocd.yaml              (helm, self-manage) + argocd-httproute.yaml (raw)
+    ├── redis.yaml               (raw)
+    ├── strimzi-operator.yaml    (helm) + kafka.yaml (raw: KafkaNodePool/Kafka CR)
     └── app-layer.yaml           앱 레이어 진입 포인터 → k8s-gitops/argocd
 ```
 
 ### 인프라 → 앱 레이어 체인
 
-`app-layer.yaml` 은 `platform-root` 가 관리하는 자식 Application(`app-layer-root`) 로, 앱 레이어 GitOps 레포(`k8s-gitops`)의 `argocd/` 에서 `project.yaml`(AppProject `apps`) + `root.yaml`(app-of-apps `apps-root`) 만 sync 한다. 이후 `apps-root` 가 `k8s-gitops/argocd/apps/` 의 서비스 Application 을 관리 — 앱 매니페스트 정의는 전부 `k8s-gitops` 소유, 본 레포엔 진입 포인터 1개만. 현재 `core.yaml`/`batch.yaml` 존재(적용 완료, 두 서비스 모두 CI/CD e2e 배포 검증됨), `auth` 는 매니페스트 정리(이미지 참조·네임스페이스 정합) 후 동일 패턴으로 추가 예정.
+`app-layer.yaml` 은 `platform-root` 가 관리하는 자식 Application(`app-layer-root`) 로, 앱 레이어 GitOps 레포([`k8s-gitops`](https://github.com/GGingGGang/k8s-gitops))의 `argocd/` 에서 `project.yaml`(AppProject `apps`) + `root.yaml`(app-of-apps `apps-root`) 만 sync 한다. 이후 `apps-root` 가 `k8s-gitops/argocd/apps/` 의 서비스 Application 을 관리 — 앱 매니페스트 정의는 전부 `k8s-gitops` 소유, 본 레포엔 진입 포인터 1개만. 현재 `core.yaml`/`batch.yaml`/`auth.yaml` 존재 (`core`/`batch` 는 CI/CD e2e 배포 검증됨).
 
 ```
 platform-root (본 레포, 인프라)
@@ -221,6 +223,7 @@ adopt 정상 판정: diff 가 `app.kubernetes.io/instance` 라벨 + `argocd.argo
 | kps | `75.0.0` |
 | jenkins | `5.9.26` |
 | argocd | `7.7.23` |
+| strimzi-operator | `1.0.1` |
 
 upgrade 시엔 helm 으로 먼저 올린 뒤(`helm upgrade`) `helm list -A` 로 실측값을 다시 박거나, range 로 풀고 자동 추종. 범위 핀은 새 patch 가 나오면 OutOfSync 노이즈가 생기므로 adopt 단계에선 exact 유지.
 

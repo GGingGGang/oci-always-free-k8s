@@ -117,7 +117,7 @@ HTTP listener는 hostname 박지 않음. HTTP는 redirect 전용이라 listener�
 
 ### TLS mode: Terminate
 
-NLB가 TCP passthrough이므로 TLS 종료는 Gateway envoy가 책임. mTLS passthrough (`mode: Passthrough`) 비채택 — Gateway가 SNI만 보고 백엔드로 그대로 전달하는 모드라 L7 라우팅/policy 불가. 클러스터 내부 mTLS는 Istio Ambient ztunnel이 처리하되 **per-namespace opt-in** — `istio.io/dataplane-mode: ambient` 라벨이 붙은 NS(현재 `app`/`cicd`/`vault`, `namespaces.yaml` 참조)에 한해 적용되고, 라벨 없는 NS의 내부 hop은 평문 그대로다.
+NLB가 TCP passthrough이므로 TLS 종료는 Gateway envoy가 책임. mTLS passthrough (`mode: Passthrough`) 비채택 — Gateway가 SNI만 보고 백엔드로 그대로 전달하는 모드라 L7 라우팅/policy 불가. 클러스터 내부 mTLS는 Istio Ambient ztunnel이 처리하되 **per-namespace opt-in** — `istio.io/dataplane-mode: ambient` 라벨이 붙은 NS(현재 `app`/`cicd`/`vault`/`data`/`core`/`batch`/`auth`, `namespaces.yaml` 참조)에 한해 적용되고, 라벨 없는 NS의 내부 hop은 평문 그대로다.
 
 ## 5. 주의 사항
 

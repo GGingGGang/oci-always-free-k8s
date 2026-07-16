@@ -250,14 +250,14 @@ pipeline {
 }
 ```
 
-`kanikoBuild`/`deployBump` 상세 파라미터는 `jenkins-shared-library/README.md` 참조.
+`kanikoBuild`/`deployBump` 상세 파라미터는 [`jenkins-shared-library`](https://github.com/GGingGGang/jenkins-shared-library) 레포의 README 참조.
 
 ### Trivy 컨테이너 + HTML 리포트 게시 — `agent.podTemplates.kaniko` 확장
 
-같은 pod 에 `trivy`(`aquasec/trivy`, kaniko 와 동일하게 `sleep 99d` 로 유지) 컨테이너 추가. 별도 volume mount 불필요(취약점 DB 는 이미지 자체 캐시 + 인터넷 아웃바운드로 스캔 시점에 갱신) — kaniko 처럼 GHCR 인증이 필요 없는 이유는 이미지 자체가 아니라 스캔 결과만 다루기 때문.
+같은 pod 에 `trivy`(`docker.io/aquasec/trivy:0.72.0`, kaniko 와 동일하게 `sleep 99d` 로 유지) 컨테이너 추가. kaniko 와 같은 `ghcr-push` docker config 를 `/trivy/.docker` 로 projected 마운트(`DOCKER_CONFIG` env) — push 된 이미지를 GHCR 에서 pull 해 스캔하므로 registry 인증 필요. 취약점 DB 는 인터넷 아웃바운드로 스캔 시점에 갱신(별도 volume 불요).
 
-- **`installPlugins`에 `htmlpublisher` 추가 필요** — `publishHTML` 스텝 제공.
-- **`controller.javaOpts` 로 CSP 완화 필요**: Jenkins 기본 `hudson.model.DirectoryBrowserSupport.CSP`(`default-src 'none'`)는 아카이브/HTML Publisher 가 서빙하는 정적 페이지에서 인라인 `<style>`/`<script>` 를 전부 막는다. trivy 공식 HTML 템플릿(`jenkins-shared-library/resources/trivy/html.tpl`)이 인라인 스타일 + 인라인 스크립트(정렬/토글용, 외부 CDN 참조 없음 — 체크인 전 직접 확인)만 쓰므로, 전면 비활성화 대신 `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self'` 로 좁혀서 완화.
+- **`installPlugins`에 `htmlpublisher` 포함** — `publishHTML` 스텝 제공.
+- **`controller.javaOpts` 로 CSP 완화**: Jenkins 기본 `hudson.model.DirectoryBrowserSupport.CSP`(`default-src 'none'`)는 아카이브/HTML Publisher 가 서빙하는 정적 페이지에서 인라인 `<style>`/`<script>` 를 전부 막는다. trivy 공식 HTML 템플릿(`jenkins-shared-library/resources/trivy/html.tpl`)이 인라인 스타일 + 인라인 스크립트(정렬/토글용, 외부 CDN 참조 없음 — 체크인 전 직접 확인)만 쓰므로, 전면 비활성화 대신 `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self'` 로 좁혀서 완화.
 - 스캔/HTML 변환/게시 로직은 shared library `trivyImageScan` step 이 내부적으로 조립 (`jenkins-shared-library/vars/trivyImageScan.groovy`, 파라미터는 `jenkins-shared-library/README.md` 참조). Jenkinsfile 은 다음처럼 한 스테이지만 추가하면 됨:
 
 ```groovy
@@ -274,7 +274,7 @@ stage('Image Scan') {
 
 - **`welcome-config`** — system message ("Source of truth = git").
 - **`env-config`** — `globalNodeProperties` 로 `GH_ORG` 주입 (`containerEnv` 의 동명 env 를 JCasC `${GH_ORG}` 치환으로 받음). Jenkinsfile/seed 가 GHCR 경로·레포 URL 을 이 변수로 구성 → org 이전 시 한 곳만 변경. (도메인은 변수화 안 함 — `jenkinsUrl` 등에 이미 직접 박혀 공개값)
-- **`credentials-config`** — `github-token` (usernamePassword, scope GLOBAL). 비밀번호는 `${GIT_PAT}` 치환 — `containerEnv` 의 `GIT_PAT` (Secret `jenkins-git-pat` key `token`) 에서 주입. 용도: Jenkins 가 `k8s-gitops` 의 `manifests/<svc>` 에 image tag 를 bump (shared library `deployBump`). **credential 실값은 git 에 평문 ❌** — JCasC 는 `${GIT_PAT}` placeholder 만 보유, 실값은 Secret.
+- **`credentials-config`** — `github-token` (usernamePassword, scope GLOBAL). 비밀번호는 `${GIT_PAT}` 치환 — `containerEnv` 의 `GIT_PAT` (Secret `jenkins-git-pat` key `token`) 에서 주입. 용도: Jenkins 가 [`k8s-gitops`](https://github.com/GGingGGang/k8s-gitops) 의 `manifests/<svc>` 에 image tag 를 bump (shared library `deployBump`). **credential 실값은 git 에 평문 ❌** — JCasC 는 `${GIT_PAT}` placeholder 만 보유, 실값은 Secret.
 - **`library-config`** — Global Pipeline Library `shared` 등록 (`unclassified.globalLibraries`). `jenkins-shared-library` 레포를 modernSCM git retriever 로 로드, `defaultVersion: main`. **`implicit: false` 라 자동 로드 ❌** — Jenkinsfile 이 `@Library('shared') _` 로 명시 호출해야 적재. 공용 step(예: `kanikoBuild`)을 앱 레포 3곳이 중복 보유하지 않게 하는 단일 출처.
 - **`jobs-config`** — `job-dsl` 로 잡을 선언적 생성. UI 클릭 잡 생성은 emptyDir 라 재기동 시 증발하므로 무효. `organizationFolder('services')` 1개가 레포를 **자동 발견** — 잡을 명세하지 않고 발견 규칙만 명세:
   - `repoOwner('${GH_ORG}')` + `sourceRegexFilter('svc-.*')` — 소유자의 레포 중 `svc-` prefix 만 골라 각각 multibranch 파이프라인 생성. 인벤토리를 git 에 손으로 나열하지 않고 GitHub 스캔으로 재도출 → emptyDir(stateless) 철학과 정합(job 목록조차 상태로 안 들고 boot 마다 derive).
@@ -282,9 +282,9 @@ stage('Image Scan') {
   - `gitHubBranchDiscovery(strategyId 1)` 브랜치만 발견(PR 미포함) · `periodicFolderTrigger('15m')` 웹훅 유실·신규 레포 폴백 재스캔 · `orphanedItemStrategy` 사라진 브랜치/레포 잡 자동 정리.
   - `queue('services')` — job-dsl 은 폴더를 **생성만** 하고 첫 Scan Organization 을 스스로 돌리지 않는다. emptyDir 콜드부트 직후는 잡 0개 상태라 webhook 이 와도 매칭 대상이 없으므로, JCasC 적용(부팅·reload) 시마다 스캔을 큐잉해 잡 인벤토리를 사람 개입 없이 재도출.
 
-> 앱 추가 계약: 레포명 `svc-<service>` (예: `svc-core`, `svc-auth`) + 루트 `Jenkinsfile`. 이름 규칙만 지키면 다음 스캔에 자동 편입 — `jobs-config` · 인프라 무수정. `svc-` prefix 가 인프라/라이브러리 레포(`oci-terraform`/`jenkins-shared-library`/`k8s-gitops`)를 멤버십에서 자동 배제. 타입(front/back/batch)은 멤버십 regex 에 안 넣고 각 레포 Jenkinsfile(shared library 호출)이 처리 — 타입 늘어도 regex 무수정.
+> 앱 추가 계약: 레포명 `svc-<service>` (예: `svc-core`, `svc-auth`) + 루트 `Jenkinsfile`. 이름 규칙만 지키면 다음 스캔에 자동 편입 — `jobs-config` · 인프라 무수정. `svc-` prefix 가 인프라/라이브러리 레포(`oci-always-free-k8s`/`jenkins-shared-library`/`k8s-gitops`)를 멤버십에서 자동 배제. 타입(front/back/batch)은 멤버십 regex 에 안 넣고 각 레포 Jenkinsfile(shared library 호출)이 처리 — 타입 늘어도 regex 무수정.
 
-> 자격증명·라이브러리·발견이 모두 `${GH_ORG}` 로 소유자를 구성 → org 이전 시 `containerEnv` 한 곳만 변경.
+> 라이브러리·발견이 `${GH_ORG}` 로 소유자를 구성 → org 이전 시 `containerEnv` 한 곳만 변경. (`credentials-config` 의 username 은 리터럴 — org 이전 시 함께 변경.)
 
 > 트리거 등록 방식: `organizationFolder` 는 발견한 레포에 훅 자동 등록 가능 — `github-token` 에 `admin:repo_hook` scope 면 스캔 시 레포별 webhook 생성, 없으면 `periodicFolderTrigger('15m')` 폴백(최대 15분 지연). 개인 계정은 계정-레벨 훅이 없어 레포별 훅 or 폴백, 진짜 org 는 org-레벨 단일 훅 가능. 종착지는 GitHub App.
 
@@ -363,24 +363,23 @@ kubectl logs -n cicd jenkins-0 -c jenkins | grep -iE "casc|configuration-as-code
 
 빌드 메타데이터는 controller pod 재시작 시 모두 손실. *수용 가능*:
 - 빌드 결과물(image): GHCR에 영구 보존
-- 빌드 로그: observability stack의 Loki에 수집 (Alloy)
+- 빌드 로그: observability stack의 Loki에 수집 (Alloy — 도입 예정)
 - 빌드 트리거 이력: GitHub commit + webhook 로그
 - 파이프라인 정의: git (Jenkinsfile)
 
 → source of truth가 *git + GHCR + Loki* 분산. controller PV ❌도 무손실.
 
-### 초기 admin 비밀번호 회전
+### admin 비밀번호 회전
 
-chart가 자동 생성한 `jenkins-admin-password` Secret은 *plain text*. 운영 진입 시:
+`jenkins-admin-fixed` Secret 의 자격은 *plain text* (git 밖, §2 참조). 비번 변경은 Secret 갱신 + pod 재기동. 운영 진입 시:
 
 1. JCasC `securityRealm` 을 GitHub OAuth (또는 Dex) 로 전환 — 보안 강화 단계
-2. `jenkins-admin` 사용자 비활성화 또는 강력한 비밀번호로 변경
-3. 초기 admin Secret 삭제
+2. `admin` 사용자 비활성화 또는 강력한 비밀번호로 변경
 
 ### Gateway listener attach 실패 시
 
 ```bash
-kubectl describe httproute jenkins -n cicd | grep -A5 "Conditions\|Parents"
+kubectl describe httproute jenkins-webhook -n cicd | grep -A5 "Conditions\|Parents"
 ```
 
 `ResolvedRefs: False` 또는 `Accepted: False` 시 원인:
@@ -390,7 +389,7 @@ kubectl describe httproute jenkins -n cicd | grep -A5 "Conditions\|Parents"
 
 ### prometheus integration
 
-현재 `prometheus.enabled: false`. kube-prometheus-stack 도입 후 활성화 — `prometheus.serviceMonitor.enabled: true` + ServiceMonitor 자동 등록. 빌드 큐 길이, agent 생성 시간, 빌드 실패율 메트릭 수집.
+현재 `prometheus.enabled: false`. kube-prometheus-stack 은 도입 완료(`../monitoring/`) — 활성화 시 `prometheus.serviceMonitor.enabled: true` + ServiceMonitor 자동 등록. 빌드 큐 길이, agent 생성 시간, 빌드 실패율 메트릭 수집.
 
 ### Kaniko 빌드 실패 디버깅
 
@@ -418,4 +417,4 @@ controller pod 단일. node 장애 시:
 - 정상: ~3분 (k8s scheduler가 다른 노드로 재배치 + JCasC reload + plugin 로드)
 - 노드 둘 다 장애: terraform apply 후 재설치 (~30분)
 
-ArgoCD가 Jenkins Application으로 관리하면 cluster 재구축 시 ArgoCD sync 한 번에 복구.
+Jenkins 는 ArgoCD `jenkins` Application 으로 관리되므로 cluster 재구축 시 ArgoCD sync 한 번에 복구.
