@@ -267,6 +267,30 @@ agent:
                 volumeMounts:
                   - name: docker-config
                     mountPath: /trivy/.docker
+              - name: cosign
+                image: docker.io/bitnami/cosign:2.4.1
+                command: ["sleep"]
+                args: ["99d"]
+                env:
+                  - name: DOCKER_CONFIG
+                    value: /cosign/.docker
+                  - name: COSIGN_PASSWORD
+                    valueFrom:
+                      secretKeyRef:
+                        name: cosign-key
+                        key: password
+                resources:
+                  requests:
+                    cpu: 50m
+                    memory: 128Mi
+                  limits:
+                    memory: 256Mi
+                volumeMounts:
+                  - name: docker-config
+                    mountPath: /cosign/.docker
+                  - name: cosign-key
+                    mountPath: /cosign/key
+                    readOnly: true
             volumes:
               - name: docker-config
                 projected:
@@ -276,6 +300,9 @@ agent:
                         items:
                           - key: .dockerconfigjson
                             path: config.json
+              - name: cosign-key
+                secret:
+                  secretName: cosign-key
 
 serviceAccount:
   create: false

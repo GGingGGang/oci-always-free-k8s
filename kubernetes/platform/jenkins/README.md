@@ -268,6 +268,23 @@ stage('Image Scan') {
 }
 ```
 
+### cosign 컨테이너 + 이미지 서명 — `agent.podTemplates.kaniko` 확장
+
+같은 pod 에 `cosign`(shell 포함 이미지, kaniko 와 동일하게 `sleep 99d` 로 유지) 컨테이너 추가. cosign 공식 이미지는 distroless 라 `sleep`/`sh` 가 없어 사이드카(agent 유지 + `exec`)로 못 쓴다 — kaniko 가 `:debug` 를 쓰는 이유와 동일. `ghcr-push` docker config 를 `/cosign/.docker` 로 마운트(`DOCKER_CONFIG` env) — 서명 아티팩트를 GHCR 에 push 하므로 registry 인증 필요.
+
+- **`cosign-key` Secret 마운트** — `build` NS 의 Secret(key `cosign.key`+`password`)을 `/cosign/key` 로 마운트. 개인키는 파일(`cosign.key`), 비밀번호는 `COSIGN_PASSWORD` env(`secretKeyRef`)로 주입 — Jenkinsfile/스텝이 비번을 직접 다루지 않음.
+- **digest 기준 서명** — `kanikoBuild` 가 `--digest-file` 로 기록한 push 이미지 digest 를 읽어 `cosign sign <image>@<digest>` 실행. 태그가 아닌 불변 digest 로 서명.
+- **`--tlog-upload=false`** — 공개 Rekor 미사용(self-contained). 검증(Kyverno)도 tlog 무시로 맞춰야 함.
+- 서명 로직은 shared library `cosignSign` step 이 조립 (`jenkins-shared-library/vars/cosignSign.groovy`). Jenkinsfile 은 한 스테이지만 추가:
+
+```groovy
+stage('Sign') {
+  steps {
+    cosignSign(image: env.IMAGE)
+  }
+}
+```
+
 ### JCasC seed — 환경변수 · 자격증명 · 라이브러리 · 잡
 
 `JCasC.configScripts` 가 다섯 조각으로 분리:
@@ -337,6 +354,7 @@ manifest commit 패턴: Jenkins 는 *k8s API 직접 호출 ❌*, *git push (`k8s
 본 setup 에 필수:
 
 - `ghcr-push` (Kaniko 빌드용, `build` NS) — type `kubernetes.io/dockerconfigjson`
+- `cosign-key` (이미지 서명용, `build` NS) — key `cosign.key`(암호화 개인키) + `password`. cosign 컨테이너가 파일 마운트 + `COSIGN_PASSWORD` env 로 소비. 생성: `cosign generate-key-pair` → `kubectl create secret generic cosign-key -n build --from-file=cosign.key --from-literal=password=<비번>`. 공개키(`cosign.pub`)는 Kyverno 검증용으로 별도 보관.
 - `jenkins-git-pat` (`cicd` NS, key `token`) — `containerEnv` 의 `GIT_PAT` → JCasC `credentials-config` 의 `github-token` 비밀번호. 매니페스트 bump push 용. **미존재 시 controller pod 가 `secretKeyRef` 로 기동 실패.**
 
 앱 레포 등장 시점에 추가 도입:
