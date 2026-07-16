@@ -268,7 +268,7 @@ agent:
                   - name: docker-config
                     mountPath: /trivy/.docker
               - name: cosign
-                image: docker.io/bitnami/cosign:2.4.1
+                image: docker.io/bitnami/cosign:latest
                 command: ["sleep"]
                 args: ["99d"]
                 env:
