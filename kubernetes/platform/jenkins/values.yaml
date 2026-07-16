@@ -271,6 +271,8 @@ agent:
                 image: docker.io/bitnami/cosign:latest
                 command: ["sleep"]
                 args: ["99d"]
+                securityContext:
+                  runAsUser: 0
                 env:
                   - name: DOCKER_CONFIG
                     value: /cosign/.docker
