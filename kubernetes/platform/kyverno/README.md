@@ -49,7 +49,8 @@ kubectl describe policyreport -n auth | grep -B2 -A6 verify-svc-auth
 - **스코프 `auth` NS + `ghcr.io/ggingggang/svc-auth*` 한정** — 위와 동일 이유. 확산 시 `namespaces`/`imageReferences` 확장.
 - **`mutateDigest`/`verifyDigest`: false** — Audit 은 관찰 전용이라 mutation 불가 (kyverno 정책 검증 웹훅이 `mutateDigest=false` 강제). 배포 이미지가 태그(git SHA) 참조라 `verifyDigest` 도 함께 off — 켜두면 서명이 정상이어도 "digest 미참조"로 FAIL 이 찍혀 리포트가 오염됨. **Enforce 전환 시 둘 다 기본(true)으로 되돌려** admission 단계 digest 핀까지 확보.
 - **`type: SigstoreBundle`** — cosign v3 는 서명을 레거시 `.sig` 태그가 아닌 Sigstore bundle(OCI referrer)로 부착. 레거시 방식으로는 서명을 못 찾음.
-- **`rekor.ignoreTlog: true`** — 서명이 투명성 로그 없이 생성됨(자체완결 설계, 공개 Rekor 미사용). 이 설정 없으면 Rekor 조회 실패로 검증이 깨짐.
+- **서명은 Rekor tlog 포함(표준 경로)** — 초기에 tlog 없는 서명을 시도했으나 Kyverno SigstoreBundle 검증이 타임스탬프 없는 bundle 을 수용하지 않아(정책 `rekor.ignoreTlog: true` 로도 통과 불가, 실측) 서명 쪽을 표준으로 전환. `ignoreTlog: true` 는 현재 무해하게 남아 있음 — Enforce 전환 시 제거해 tlog 검증까지 활성화 검토.
+- **`imageRegistryCredentials.secrets: [ghcr-pull]` (rule 레벨)** — private GHCR 의 서명 bundle 조회는 rule 레벨 자격증명만 유효(실측). 차트 전역 `existingImagePullSecrets`(`--imagePullSecrets` 인자)는 파싱은 되지만 SigstoreBundle fetch 경로에 적용되지 않았음 — values 쪽 설정은 정리 대상.
 - **GHCR private 유지 + `existingImagePullSecrets: [ghcr-pull]`** — kyverno 는 서명 bundle 을 자체 자격증명으로 조회 (파드의 imagePullSecrets 는 kubelet 용 — 검증 fetch 에 미적용). 차트 최상위 `existingImagePullSecrets` 가 검증용 registry client 에 연결됨. 트레이드오프는 주의 사항 참조.
 - **background/cleanup controller off** — mutate-existing/generate/cleanup 정책 미사용. 24GB 예산에서 admission + reports 만 상주.
 - **admission replicas 1** — HA 보다 RAM 우선 (다른 플랫폼 컴포넌트와 동일 기조).
