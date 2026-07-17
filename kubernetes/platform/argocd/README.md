@@ -97,7 +97,7 @@ Jenkins 는 `existingSecret: jenkins-admin-fixed` 로 실 자격증명을 git �
 
 ### 리소스 핀
 
-총 ~1312Mi (controller 1024 + repo 128 + server 64 + appset 64 + redis 32). Always Free 분배 (Vault + Prometheus 우선) 에 맞춰 tight 설정.
+총 ~1312Mi (controller 1024 + repo 128 + server 64 + appset 64 + redis 32). Always Free 분배 (Vault + Prometheus 우선) 에 맞춰 tight 설정. repo-server limit 은 512Mi — 대형 차트(kyverno 등) 렌더 피크에서 256Mi limit 로는 OOMKill(`ComparisonError ... EOF`) 발생. limit 만 상향, requests 불변이라 스케줄링 장부 영향 없음.
 
 controller가 옛 768Mi request / 1Gi limit 근처(실사용 990~1003Mi)에서 GC 압박으로 `readinessProbe`(`/healthz`, `timeoutSeconds: 1`) 간헐 실패(11h+ 지속) → request/limit을 1Gi/1.5Gi로 상향. 파드가 뜬 노드 기준 requests/limits 여유 충분해 상향 부담 없음.
 
