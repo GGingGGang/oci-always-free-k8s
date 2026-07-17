@@ -1,0 +1,12 @@
+# 24GB 예산 — admission(검증) + reports(Audit 가시성)만. mutate-existing/generate/cleanup 미사용.
+admissionController:
+  replicas: 1
+
+backgroundController:
+  enabled: false
+
+cleanupController:
+  enabled: false
+
+reportsController:
+  enabled: true

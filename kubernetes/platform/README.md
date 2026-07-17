@@ -14,6 +14,7 @@ infra 부트스트랩(Gateway / TLS / DNS) 위에서 동작하는 플랫폼 계�
 | `monitoring/` | 관측 (메트릭/알림/대시보드) | prometheus-community/kube-prometheus-stack `~75.0.0` | `monitoring` (PSA baseline) | tailnet (parked — `grafana.ggang.cloud` 주석 처리) |
 | `redis/` | MSA 캐시 (cache-aside, ephemeral) | — (raw manifest, `redis:*-alpine`) | `data` (PSA baseline, ambient) | 없음 (ClusterIP, in-mesh) |
 | `kafka/` | MSA 이벤트 백본 (Strimzi, KRaft, ephemeral) | strimzi/strimzi-kafka-operator `1.0.1` + Kafka CR | `data` (PSA baseline, ambient) | 없음 (ClusterIP, in-mesh) |
+| `kyverno/` | 정책 엔진 — 이미지 서명 admission 검증 (cosign 공급망 체인) | kyverno/kyverno `3.8.2` + ClusterPolicy | `kyverno` (PSA baseline) | 없음 |
 
 ## 2. 전제 조건 (infra 의존)
 
@@ -36,9 +37,10 @@ infra 부트스트랩 완료 후:
 4. monitoring   helm (kube-prometheus-stack) + httproute
 5. redis        kubectl apply (raw manifest, data NS)
 6. kafka        strimzi operator(helm) → Kafka CR (CRD 선행)
+7. kyverno      helm → ClusterPolicy (정책은 kyverno CRD 선행)
 ```
 
-대체로 상호 독립 — argocd/jenkins/monitoring/redis 는 순서 무관. openbao 만 terraform 선행(KMS 키 + Dynamic Group/Policy), kafka 만 strimzi operator(CRD) 선행. 각 단계 상세는 해당 폴더 README 참조.
+대체로 상호 독립 — argocd/jenkins/monitoring/redis 는 순서 무관. openbao 만 terraform 선행(KMS 키 + Dynamic Group/Policy), kafka 만 strimzi operator(CRD) 선행, kyverno 정책(ClusterPolicy)은 kyverno 차트(CRD) 선행. 각 단계 상세는 해당 폴더 README 참조.
 
 ## 4. 외부 노출 / TLS
 

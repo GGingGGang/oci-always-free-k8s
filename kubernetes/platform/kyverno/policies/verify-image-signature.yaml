@@ -1,0 +1,32 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-svc-image-signature
+spec:
+  validationFailureAction: Audit
+  background: false
+  webhookTimeoutSeconds: 30
+  rules:
+    - name: verify-svc-auth-signature
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - auth
+      verifyImages:
+        - type: SigstoreBundle
+          imageReferences:
+            - "ghcr.io/ggingggang/svc-auth*"
+          failureAction: Audit
+          attestors:
+            - entries:
+                - keys:
+                    publicKeys: |-
+                      -----BEGIN PUBLIC KEY-----
+                      MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE92VHKpaJ8cuHBSZX0fcD55oSbdMq
+                      W8gApA8m6UHPHvCoj/NmSfJXGRLBV+IcJW/9Wm6ZhIovIEJUN87LVHv3hg==
+                      -----END PUBLIC KEY-----
+                    rekor:
+                      ignoreTlog: true

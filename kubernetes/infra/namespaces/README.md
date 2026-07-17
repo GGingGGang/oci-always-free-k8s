@@ -29,6 +29,7 @@ kubectl apply -f namespaces.yaml
 | `batch` | MSA 도메인 batch 서비스 (PSA `enforce=restricted`, Istio ambient enrolled) |
 | `auth` | MSA 도메인 auth API 서비스 (PSA `enforce=restricted`, Istio ambient enrolled) |
 | `data` | 백킹 데이터 서비스 — Redis, Kafka(Strimzi) (PSA `enforce=baseline`, Istio ambient enrolled) |
+| `kyverno` | Kyverno 정책 엔진 — admission 이미지 서명 검증 (PSA `enforce=baseline`) |
 
 ## 3. 검증
 
