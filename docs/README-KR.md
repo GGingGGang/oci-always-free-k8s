@@ -34,7 +34,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 | 앱 (MSA) | core (Go/chi), batch (Java/Spring Batch), auth (Node.js/Fastify) → Kaniko/GHCR → ArgoCD app-of-apps | 진행 중 |
 | 시크릿 | OpenBao (Vault), OCI KMS auto-unseal | 완료 |
 | 관측 | kube-prometheus-stack (메트릭) | 완료 · Loki/Alloy/Tempo/Kiali 예정 |
-| 보안 | Trivy, Kyverno, cosign, PSA, NetworkPolicy | Trivy(CI 스캔) · PSA 사용 중, 나머지 예정 |
+| 보안 | Trivy, cosign, Kyverno, PSA, NetworkPolicy | Trivy(CI 스캔) · cosign(이미지 서명) · Kyverno(verifyImages, Audit) · PSA 사용 중 · NetworkPolicy 예정 |
 | 앱 데이터 | Strimzi/Kafka (KRaft, ephemeral), Redis (캐시) | 완료 |
 | 오토스케일 | HPA + Prometheus Adapter | 예정 |
 | DR / 백업 | Velero, OCI Block Volume Backup, Vault Raft Snapshot | 예정 |
@@ -126,6 +126,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 │   │   ├── monitoring/         # kube-prometheus-stack
 │   │   ├── redis/              # MSA 캐시 (ephemeral, cache-aside)
 │   │   ├── kafka/              # MSA 이벤트 백본 (Strimzi, KRaft, ephemeral)
+│   │   ├── kyverno/            # 정책 엔진 — 이미지 서명 admission 검증
 │   │   └── README.md
 │   ├── test/                   # 일회성 검증
 │   └── README.md

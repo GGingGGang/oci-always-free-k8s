@@ -24,7 +24,8 @@ kubernetes/
 │   ├── openbao/          # 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal + Injector)
 │   ├── monitoring/       # kube-prometheus-stack (Prometheus/Alertmanager/Grafana)
 │   ├── redis/            # MSA 캐시 (ephemeral, cache-aside, data NS)
-│   └── kafka/            # MSA 이벤트 백본 (Strimzi, KRaft, ephemeral, data NS)
+│   ├── kafka/            # MSA 이벤트 백본 (Strimzi, KRaft, ephemeral, data NS)
+│   └── kyverno/          # 정책 엔진 — 이미지 서명 admission 검증 (kyverno NS)
 └── test/                 # 일회성 검증 자산
     ├── networking/       # NLB smoke test
     ├── storage/          # Block Volume CSI smoke test
@@ -47,5 +48,5 @@ helm install + `kubectl apply` 수동(멱등) 흐름이 cold-start / DR 복구 �
 
 ## 예정 추가
 
-- `platform/` — argocd, jenkins, openbao, monitoring, 데이터 계층(redis/kafka, `data` NS) 도입 완료. 관측 후속(Loki / Alloy / Tempo / Kiali) 예정
+- `platform/` — argocd, jenkins, openbao, monitoring, 데이터 계층(redis/kafka, `data` NS), kyverno(이미지 서명 admission 검증, Audit) 도입 완료. 관측 후속(Loki / Alloy / Tempo / Kiali) 예정
 - 앱 레이어(app-of-apps)는 전용 GitOps 레포(`k8s-gitops`)로 분리 — `core`/`batch`/`auth` Application + 매니페스트 이전 완료. 후속 east-west 메시(NetworkPolicy/AuthorizationPolicy)

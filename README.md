@@ -34,7 +34,7 @@ This repo is the entry point. Application code, GitOps state, and CI tooling liv
 | App (MSA) | core (Go/chi), batch (Java/Spring Batch), auth (Node.js/Fastify) → Kaniko/GHCR → ArgoCD app-of-apps | in progress |
 | Secrets | OpenBao (Vault), OCI KMS auto-unseal | done |
 | Observability | kube-prometheus-stack (metrics) | done · Loki/Alloy/Tempo/Kiali planned |
-| Security | Trivy, Kyverno, cosign, PSA, NetworkPolicy | Trivy (CI scan) · PSA in use, rest planned |
+| Security | Trivy, cosign, Kyverno, PSA, NetworkPolicy | Trivy (CI scan) · cosign (image signing) · Kyverno (verifyImages, Audit) · PSA in use · NetworkPolicy planned |
 | App data | Strimzi/Kafka (KRaft, ephemeral), Redis (cache) | done |
 | Autoscaling | HPA + Prometheus Adapter | planned |
 | DR / Backup | Velero, OCI Block Volume Backup, Vault Raft Snapshot | planned |
@@ -126,6 +126,7 @@ Full catalog: [`docs/summary.md`](./docs/summary.md).
 │   │   ├── monitoring/         # kube-prometheus-stack
 │   │   ├── redis/              # MSA cache (ephemeral, cache-aside)
 │   │   ├── kafka/              # MSA event backbone (Strimzi, KRaft, ephemeral)
+│   │   ├── kyverno/            # Policy engine — image signature admission verification
 │   │   └── README.md
 │   ├── test/                   # One-shot validation
 │   └── README.md
