@@ -1,4 +1,10 @@
 # 24GB 예산 — admission(검증) + reports(Audit 가시성)만. mutate-existing/generate/cleanup 미사용.
+
+# 서명 bundle 조회용 registry 자격증명 — kyverno NS 의 기존 Secret (GHCR private).
+# 검증용 registry client 전용 값 — 컨트롤러 자체 이미지 pull 용 imagePullSecrets 와 별개.
+existingImagePullSecrets:
+  - ghcr-pull
+
 admissionController:
   replicas: 1
 

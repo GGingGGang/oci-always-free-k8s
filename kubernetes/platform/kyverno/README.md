@@ -8,13 +8,22 @@
 - 서명 검증용 공개키 `cosign.pub` 보유 (키페어 생성 시 산출물 — 공개키라 git 커밋 안전)
 - ArgoCD 플랫폼 app-of-apps 가동 (`../argocd/`)
 - `kyverno` NS + PSA 라벨 (`../../infra/namespaces/`)
+- `ghcr-pull` Secret 이 `kyverno` NS 에 존재 — GHCR 패키지가 private 이라 서명 bundle 조회에 registry 자격증명 필요 (values `existingImagePullSecrets`)
 
 ## 2. 설치
 
 ArgoCD Application 2개가 담당 (`../argocd/apps/kyverno.yaml` — 차트, `kyverno-policies.yaml` — 정책):
 
 1. `policies/verify-image-signature.yaml` 의 `<cosign.pub-content>` 를 실제 `cosign.pub` 내용(BEGIN/END PUBLIC KEY 블록 전체)으로 교체
-2. push → root app 이 새 Application 2개 발견 → wave 순서(kyverno 6 → kyverno-policies 7)로 sync
+2. `ghcr-pull` Secret 을 kyverno NS 로 복사 (서명 bundle 조회용):
+
+```bash
+kubectl get secret ghcr-pull -n auth -o json \
+  | jq 'del(.metadata.uid,.metadata.resourceVersion,.metadata.creationTimestamp,.metadata.managedFields,.metadata.ownerReferences) | .metadata.namespace="kyverno"' \
+  | kubectl apply -f -
+```
+
+3. push → root app 이 새 Application 2개 발견 → wave 순서(kyverno 6 → kyverno-policies 7)로 sync
 
 ```bash
 kubectl apply -f ../../infra/namespaces/namespaces.yaml   # kyverno NS 선행
@@ -41,6 +50,7 @@ kubectl describe policyreport -n auth | grep -B2 -A6 verify-svc-auth
 - **`mutateDigest`/`verifyDigest`: false** — Audit 은 관찰 전용이라 mutation 불가 (kyverno 정책 검증 웹훅이 `mutateDigest=false` 강제). 배포 이미지가 태그(git SHA) 참조라 `verifyDigest` 도 함께 off — 켜두면 서명이 정상이어도 "digest 미참조"로 FAIL 이 찍혀 리포트가 오염됨. **Enforce 전환 시 둘 다 기본(true)으로 되돌려** admission 단계 digest 핀까지 확보.
 - **`type: SigstoreBundle`** — cosign v3 는 서명을 레거시 `.sig` 태그가 아닌 Sigstore bundle(OCI referrer)로 부착. 레거시 방식으로는 서명을 못 찾음.
 - **`rekor.ignoreTlog: true`** — 서명이 투명성 로그 없이 생성됨(자체완결 설계, 공개 Rekor 미사용). 이 설정 없으면 Rekor 조회 실패로 검증이 깨짐.
+- **GHCR private 유지 + `existingImagePullSecrets: [ghcr-pull]`** — kyverno 는 서명 bundle 을 자체 자격증명으로 조회 (파드의 imagePullSecrets 는 kubelet 용 — 검증 fetch 에 미적용). 차트 최상위 `existingImagePullSecrets` 가 검증용 registry client 에 연결됨. 트레이드오프는 주의 사항 참조.
 - **background/cleanup controller off** — mutate-existing/generate/cleanup 정책 미사용. 24GB 예산에서 admission + reports 만 상주.
 - **admission replicas 1** — HA 보다 RAM 우선 (다른 플랫폼 컴포넌트와 동일 기조).
 
@@ -49,3 +59,4 @@ kubectl describe policyreport -n auth | grep -B2 -A6 verify-svc-auth
 - **Enforce 전환 전 필수 순서**: core/batch Jenkinsfile 에 `cosignSign` 스테이지 추가 → 전 서비스 재빌드(서명된 digest 로 교체) → 그 다음에만 `failureAction: Enforce`. 미서명 이미지가 도는 상태에서 Enforce 켜면 재시작/재스케줄 때 파드 생성이 거부됨.
 - webhook 은 정책 match 범위(`auth` NS Pod)로 자동 스코프됨 — kyverno 다운 시 영향도 그 범위 안. NS 를 확장할수록 kyverno 가용성이 클러스터 admission 에 직결됨.
 - 키 로테이션 시 정책 `publicKeys` 도 함께 교체 — 구 키로 서명된 이미지는 새 키로 검증 실패.
+- **`ghcr-pull` 토큰 만료 = 검증 실패.** Audit 에선 FAIL 리포트로 그치지만 **Enforce 전환 후엔 auth NS 파드 admission 거부로 승격.** 토큰 로테이션 시 kyverno NS 사본도 함께 갱신 — 시크릿 중앙화(OpenBao) 이관 시 단일 소스로 일원화 대상.
