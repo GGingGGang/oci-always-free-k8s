@@ -274,7 +274,8 @@ stage('Image Scan') {
 
 - **`cosign-key` Secret 마운트** — `build` NS 의 Secret(key `cosign.key`+`password`)을 `/cosign/key` 로 마운트. 개인키는 파일(`cosign.key`), 비밀번호는 `COSIGN_PASSWORD` env(`secretKeyRef`)로 주입 — Jenkinsfile/스텝이 비번을 직접 다루지 않음.
 - **digest 기준 서명** — `kanikoBuild` 가 `--digest-file` 로 기록한 push 이미지 digest 를 읽어 `cosign sign <image>@<digest>` 실행. 태그가 아닌 불변 digest 로 서명.
-- **Rekor tlog 포함 서명** — v3 기본 signing config(공개 sigstore) 사용. tlog 없는 bundle 은 cosign verify·Kyverno 모두 기본 거부라 표준 경로를 따른다. 외부 호출은 서명 시점(Rekor 업로드) 1회 — admission 검증은 bundle 내장 포함증명으로 오프라인.
+- **cosign v2 · 레거시 서명 포맷 · tlog 미사용** — 이미지는 자체 빌드 `ghcr.io/ggingggang/cosign:2.4.1` (`cosign-image/Dockerfile`: 공식 v2 distroless 에서 바이너리만 추출해 alpine 탑재). 사유: 공식 v2 이미지는 shell 이 없어 사이드카 불가, v3 는 레거시 포맷 서명이 제거됐는데 **Kyverno 는 v3 bundle 의 raw key 검증을 미지원**(kyverno#16267 — 수정 PR #16270 진행 중), bitnami 등 서드파티는 버전 태그를 내려 재현성 불가. v2 `--tlog-upload=false` 로 외부(Rekor) 호출 없이 자체완결 서명 — 검증측 Kyverno `rekor.ignoreTlog: true` 와 세트. bundle 지원이 Kyverno 에 릴리스되면 v3 복귀 검토.
+- **podTemplate `imagePullSecrets: ghcr-pull`** — 자체 빌드 cosign 이미지가 private GHCR 소속이라 파드 이미지 pull 에 필요 (기존 공개 이미지들엔 불필요했던 항목).
 - 서명 로직은 shared library `cosignSign` step 이 조립 (`jenkins-shared-library/vars/cosignSign.groovy`). Jenkinsfile 은 한 스테이지만 추가:
 
 ```groovy
@@ -354,6 +355,7 @@ manifest commit 패턴: Jenkins 는 *k8s API 직접 호출 ❌*, *git push (`k8s
 본 setup 에 필수:
 
 - `ghcr-push` (Kaniko 빌드용, `build` NS) — type `kubernetes.io/dockerconfigjson`
+- `ghcr-pull` (`build` NS) — podTemplate `imagePullSecrets` 용. 자체 빌드 cosign 이미지(`ghcr.io/ggingggang/cosign`)가 private GHCR 소속이라 빌드 파드의 이미지 pull 에 필요. 앱 NS 의 동명 Secret 을 복사.
 - `cosign-key` (이미지 서명용, `build` NS) — key `cosign.key`(암호화 개인키) + `password`. cosign 컨테이너가 파일 마운트 + `COSIGN_PASSWORD` env 로 소비. 생성: `cosign generate-key-pair` → `kubectl create secret generic cosign-key -n build --from-file=cosign.key --from-literal=password=<비번>`. 공개키(`cosign.pub`)는 Kyverno 검증용으로 별도 보관.
 - `jenkins-git-pat` (`cicd` NS, key `token`) — `containerEnv` 의 `GIT_PAT` → JCasC `credentials-config` 의 `github-token` 비밀번호. 매니페스트 bump push 용. **미존재 시 controller pod 가 `secretKeyRef` 로 기동 실패.**
 

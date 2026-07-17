@@ -16,8 +16,7 @@ spec:
               namespaces:
                 - auth
       verifyImages:
-        - type: SigstoreBundle
-          imageReferences:
+        - imageReferences:
             - "ghcr.io/ggingggang/svc-auth*"
           failureAction: Audit
           mutateDigest: false

@@ -4,7 +4,7 @@
 
 ## 1. 전제 조건
 
-- cosign 서명 체계 가동 — svc 레포 CI 의 `cosignSign` 스텝이 GHCR 에 Sigstore bundle 서명 부착 ([jenkins-shared-library](https://github.com/GGingGGang/jenkins-shared-library) README 참조)
+- cosign 서명 체계 가동 — svc 레포 CI 의 `cosignSign` 스텝이 GHCR 에 레거시 포맷(`.sig` 태그) 서명 부착 ([jenkins-shared-library](https://github.com/GGingGGang/jenkins-shared-library) README 참조)
 - 서명 검증용 공개키 `cosign.pub` 보유 (키페어 생성 시 산출물 — 공개키라 git 커밋 안전)
 - ArgoCD 플랫폼 app-of-apps 가동 (`../argocd/`)
 - `kyverno` NS + PSA 라벨 (`../../infra/namespaces/`)
@@ -48,8 +48,8 @@ kubectl describe policyreport -n auth | grep -B2 -A6 verify-svc-auth
 - **Audit 모드 시작** — Enforce 는 서명 없는 이미지를 admission 에서 거부. 현재 서명하는 서비스가 svc-auth 뿐이라 Enforce 로 시작하면 core/batch 가 재시작 시점에 전부 막힘. Audit 리포트 검증 → 전 svc 에 Sign 스테이지 확산 → Enforce 전환 순서.
 - **스코프 `auth` NS + `ghcr.io/ggingggang/svc-auth*` 한정** — 위와 동일 이유. 확산 시 `namespaces`/`imageReferences` 확장.
 - **`mutateDigest`/`verifyDigest`: false** — Audit 은 관찰 전용이라 mutation 불가 (kyverno 정책 검증 웹훅이 `mutateDigest=false` 강제). 배포 이미지가 태그(git SHA) 참조라 `verifyDigest` 도 함께 off — 켜두면 서명이 정상이어도 "digest 미참조"로 FAIL 이 찍혀 리포트가 오염됨. **Enforce 전환 시 둘 다 기본(true)으로 되돌려** admission 단계 digest 핀까지 확보.
-- **`type: SigstoreBundle`** — cosign v3 는 서명을 레거시 `.sig` 태그가 아닌 Sigstore bundle(OCI referrer)로 부착. 레거시 방식으로는 서명을 못 찾음.
-- **서명은 Rekor tlog 포함(표준 경로)** — 초기에 tlog 없는 서명을 시도했으나 Kyverno SigstoreBundle 검증이 타임스탬프 없는 bundle 을 수용하지 않아(정책 `rekor.ignoreTlog: true` 로도 통과 불가, 실측) 서명 쪽을 표준으로 전환. `ignoreTlog: true` 는 현재 무해하게 남아 있음 — Enforce 전환 시 제거해 tlog 검증까지 활성화 검토.
+- **기본(Cosign) 검증 타입 — `type: SigstoreBundle` 미사용** — Kyverno 1.18 은 SigstoreBundle 에서 raw 공개키(`keys.publicKeys`)를 **조용히 무시**해 검증 불가 (kyverno#16267·#14233, 수정 PR #16270 진행 중 — tlog 유무 불문 "no matching signatures found" 실측). 서명을 cosign v2 레거시 포맷으로 맞추고 성숙한 기본 경로를 사용. bundle 의 key 지원이 릴리스되면 v3/bundle 복귀 검토.
+- **tlog 미사용 · `rekor.ignoreTlog: true`** — 서명이 `--tlog-upload=false`(자체완결, 공개 Rekor 미의존)라 검증도 tlog 조회를 끔. 이 설정 없으면 Rekor 조회 실패로 검증이 깨짐.
 - **`imageRegistryCredentials.secrets: [ghcr-pull]` (rule 레벨)** — private GHCR 의 서명 bundle 조회는 rule 레벨 자격증명만 유효(실측). 차트 전역 `existingImagePullSecrets`(`--imagePullSecrets` 인자)는 파싱은 되지만 SigstoreBundle fetch 경로에 적용되지 않았음 — values 쪽 설정은 정리 대상.
 - **GHCR private 유지 + `existingImagePullSecrets: [ghcr-pull]`** — kyverno 는 서명 bundle 을 자체 자격증명으로 조회 (파드의 imagePullSecrets 는 kubelet 용 — 검증 fetch 에 미적용). 차트 최상위 `existingImagePullSecrets` 가 검증용 registry client 에 연결됨. 트레이드오프는 주의 사항 참조.
 - **background/cleanup controller off** — mutate-existing/generate/cleanup 정책 미사용. 24GB 예산에서 admission + reports 만 상주.

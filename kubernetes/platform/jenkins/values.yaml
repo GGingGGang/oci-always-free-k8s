@@ -229,6 +229,8 @@ agent:
           kind: Pod
           spec:
             automountServiceAccountToken: false
+            imagePullSecrets:
+              - name: ghcr-pull
             containers:
               - name: jnlp
                 image: docker.io/jenkins/inbound-agent:3327.v868139a_d00e0-3-jdk21
@@ -268,7 +270,7 @@ agent:
                   - name: docker-config
                     mountPath: /trivy/.docker
               - name: cosign
-                image: docker.io/bitnami/cosign:latest
+                image: ghcr.io/ggingggang/cosign:2.4.1
                 command: ["sleep"]
                 args: ["99d"]
                 securityContext:
