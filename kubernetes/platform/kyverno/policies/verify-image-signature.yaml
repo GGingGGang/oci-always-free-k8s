@@ -20,6 +20,8 @@ spec:
           imageReferences:
             - "ghcr.io/ggingggang/svc-auth*"
           failureAction: Audit
+          mutateDigest: false
+          verifyDigest: false
           attestors:
             - entries:
                 - keys:

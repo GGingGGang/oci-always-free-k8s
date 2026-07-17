@@ -38,6 +38,7 @@ kubectl describe policyreport -n auth | grep -B2 -A6 verify-svc-auth
 
 - **Audit 모드 시작** — Enforce 는 서명 없는 이미지를 admission 에서 거부. 현재 서명하는 서비스가 svc-auth 뿐이라 Enforce 로 시작하면 core/batch 가 재시작 시점에 전부 막힘. Audit 리포트 검증 → 전 svc 에 Sign 스테이지 확산 → Enforce 전환 순서.
 - **스코프 `auth` NS + `ghcr.io/ggingggang/svc-auth*` 한정** — 위와 동일 이유. 확산 시 `namespaces`/`imageReferences` 확장.
+- **`mutateDigest`/`verifyDigest`: false** — Audit 은 관찰 전용이라 mutation 불가 (kyverno 정책 검증 웹훅이 `mutateDigest=false` 강제). 배포 이미지가 태그(git SHA) 참조라 `verifyDigest` 도 함께 off — 켜두면 서명이 정상이어도 "digest 미참조"로 FAIL 이 찍혀 리포트가 오염됨. **Enforce 전환 시 둘 다 기본(true)으로 되돌려** admission 단계 digest 핀까지 확보.
 - **`type: SigstoreBundle`** — cosign v3 는 서명을 레거시 `.sig` 태그가 아닌 Sigstore bundle(OCI referrer)로 부착. 레거시 방식으로는 서명을 못 찾음.
 - **`rekor.ignoreTlog: true`** — 서명이 투명성 로그 없이 생성됨(자체완결 설계, 공개 Rekor 미사용). 이 설정 없으면 Rekor 조회 실패로 검증이 깨짐.
 - **background/cleanup controller off** — mutate-existing/generate/cleanup 정책 미사용. 24GB 예산에서 admission + reports 만 상주.
