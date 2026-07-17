@@ -22,6 +22,9 @@ spec:
           failureAction: Audit
           mutateDigest: false
           verifyDigest: false
+          imageRegistryCredentials:
+            secrets:
+              - ghcr-pull
           attestors:
             - entries:
                 - keys:
