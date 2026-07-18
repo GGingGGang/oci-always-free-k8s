@@ -116,6 +116,9 @@ kubectl exec -n cicd jenkins-0 -c jenkins -- \
 kubectl get secret ghcr-push -n build -o jsonpath='{.type}'
 # kubernetes.io/dockerconfigjson 출력되어야 함
 
+kubectl get secret cosign-key ghcr-pull -n build
+# cosign-key: 서명 개인키+비번 / ghcr-pull: private cosign 이미지 pull (podTemplate imagePullSecrets)
+
 kubectl get sa kaniko-builder -n build
 ```
 

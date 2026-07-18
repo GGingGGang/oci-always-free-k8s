@@ -18,9 +18,9 @@ ArgoCD Application 2개가 담당 (`../argocd/apps/kyverno.yaml` — 차트, `ky
 2. `ghcr-pull` Secret 을 kyverno NS 로 복사 (서명 bundle 조회용):
 
 ```bash
-kubectl get secret ghcr-pull -n auth -o json \
-  | jq 'del(.metadata.uid,.metadata.resourceVersion,.metadata.creationTimestamp,.metadata.managedFields,.metadata.ownerReferences) | .metadata.namespace="kyverno"' \
-  | kubectl apply -f -
+kubectl create secret generic ghcr-pull -n kyverno \
+  --type=kubernetes.io/dockerconfigjson \
+  --from-literal=.dockerconfigjson="$(kubectl get secret ghcr-pull -n auth -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d)"
 ```
 
 3. push → root app 이 새 Application 2개 발견 → wave 순서(kyverno 6 → kyverno-policies 7)로 sync
