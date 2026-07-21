@@ -16,7 +16,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 | **oci-always-free-k8s** (본 레포) | OCI Terraform + Kubernetes 인프라 (VCN/OKE, 플랫폼, 부트스트랩) | 진행 중 |
 | [k8s-gitops](https://github.com/GGingGGang/k8s-gitops) | 앱 레이어 GitOps — Application CR + 매니페스트 (`manifests/<svc>`) | `core`, `batch`, `auth` 적용 완료 |
 | [app-templates](https://github.com/GGingGGang/app-templates) | 서비스 씨앗 (sed 토큰 치환) → 새 `svc-*` 레포 + `k8s-gitops` | `go-app`, `java-app`, `node-app` 완료 |
-| [jenkins-shared-library](https://github.com/GGingGGang/jenkins-shared-library) | Jenkins Global Pipeline Library (`kanikoBuild`, `trivyImageScan`, `deployBump`) | 사용 중 |
+| [jenkins-shared-library](https://github.com/GGingGGang/jenkins-shared-library) | Jenkins Global Pipeline Library — `ci()` 진입점 (build/scan/sign/bump, 서비스별 설정은 `services.yaml`) | 사용 중 |
 | [svc-core](https://github.com/GGingGGang/svc-core) | 일정 도메인 API (Go/chi) | CI/CD 완주 검증됨, 도메인 로직 진행 중 |
 | [svc-batch](https://github.com/GGingGGang/svc-batch) | 리마인더/Kafka consumer (Java/Spring Batch) | CI/CD 완주 검증됨, 배포·운영 중 |
 | [svc-auth](https://github.com/GGingGGang/svc-auth) | 인증/세션/토큰 (Node.js/Fastify) | CI/CD 완주 검증됨, 인증 플로우 구현 중 |

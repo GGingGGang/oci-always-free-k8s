@@ -102,6 +102,7 @@ controller:
     - pipeline-stage-step:312.v8cd10304c27a_
     - pipeline-stage-tags-metadata:2.2255.v56a_15e805f12
     - pipeline-stage-view:2.41
+    - pipeline-utility-steps:3.810.va_7672d206740
     - plain-credentials:199.v9f8e1f741799
     - plugin-util-api:6.1192.v30fe6e2837ff
     - prism-api:1.30.0-717.vb_f8360844b_53

@@ -216,44 +216,17 @@ cache + memory 폭주 회피 args (Jenkinsfile 에서 주입):
 
 **`--ignore-path` 필수 — kaniko ↔ durable-task hang**: kaniko 는 최종 이미지 fs 를 컨테이너 `/` 에 풀며 debug 이미지의 shell(`/busybox`)을 덮어쓴다. 그러면 Jenkins durable-task wrapper 가 step 종료코드(`jenkins-result.txt`)를 못 써서 — **이미지는 GHCR push 성공인데 잡은 무한 hang**. `/busybox`(shell)와 `/home/jenkins`(agent workspace) 를 ignore-path 로 보존하면 해소. 증상 식별: 살아있는 `jnlp` 컨테이너로 `find /home/jenkins/agent/workspace -name jenkins-result.txt` → 파일 부재면 이 케이스.
 
-위 `/kaniko/executor` 옵션들은 shared library `kanikoBuild` step 이 내부적으로 조립한다 (`jenkins-shared-library/vars/kanikoBuild.groovy`). 앱 레포 `Jenkinsfile` 은 raw kaniko 호출을 직접 쓰지 않고 shared library 를 통해서만 빌드한다:
+위 `/kaniko/executor` 옵션들은 shared library `kanikoBuild` step 이 내부적으로 조립한다 (`jenkins-shared-library/vars/kanikoBuild.groovy`). 앱 레포 `Jenkinsfile` 은 raw kaniko 호출도, 개별 스테이지 나열도 하지 않고 `ci()` 메타 step 하나로 전체 파이프라인(Build & Push → Image Scan → Sign → Bump)을 조립한다:
 
 ```groovy
 @Library('shared') _
 
-pipeline {
-  agent {
-    kubernetes {
-      label 'kaniko'
-      defaultContainer 'kaniko'
-    }
-  }
-  environment {
-    SVC   = 'core'
-    IMAGE = "ghcr.io/${env.GH_ORG.toLowerCase()}/svc-${SVC}"
-    TAG   = "${env.GIT_COMMIT}"
-  }
-  stages {
-    stage('Build & Push') {
-      steps {
-        kanikoBuild(
-          image: env.IMAGE,
-          context: "dir://${env.WORKSPACE}",
-          tags: [env.TAG, 'latest'],
-          buildArgs: [GIT_SHA: env.GIT_COMMIT]
-        )
-      }
-    }
-    stage('Bump') {
-      steps {
-        deployBump(service: env.SVC, image: env.IMAGE, tag: env.TAG)
-      }
-    }
-  }
-}
+ci(service: 'core')
 ```
 
-`kanikoBuild`/`deployBump` 상세 파라미터는 [`jenkins-shared-library`](https://github.com/GGingGGang/jenkins-shared-library) 레포의 README 참조.
+서비스별로 갈리는 값(스캔 게이트, 서명 여부)은 Jenkinsfile 이 아니라 shared library 의 `resources/ci/services.yaml` 한 파일에 모여 있다 — 새 서비스 추가·설정 변경이 그 파일 한 줄로 끝나고 `ci.groovy`/Jenkinsfile 은 무수정. `services.yaml` 파싱에 `installPlugins` 의 `pipeline-utility-steps`(`readYaml` 스텝) 필요.
+
+`ci()`/`kanikoBuild`/`deployBump` 상세 파라미터는 [`jenkins-shared-library`](https://github.com/GGingGGang/jenkins-shared-library) 레포의 README 참조.
 
 ### Trivy 컨테이너 + HTML 리포트 게시 — `agent.podTemplates.kaniko` 확장
 
@@ -261,15 +234,7 @@ pipeline {
 
 - **`installPlugins`에 `htmlpublisher` 포함** — `publishHTML` 스텝 제공.
 - **`controller.javaOpts` 로 CSP 완화**: Jenkins 기본 `hudson.model.DirectoryBrowserSupport.CSP`(`default-src 'none'`)는 아카이브/HTML Publisher 가 서빙하는 정적 페이지에서 인라인 `<style>`/`<script>` 를 전부 막는다. trivy 공식 HTML 템플릿(`jenkins-shared-library/resources/trivy/html.tpl`)이 인라인 스타일 + 인라인 스크립트(정렬/토글용, 외부 CDN 참조 없음 — 체크인 전 직접 확인)만 쓰므로, 전면 비활성화 대신 `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self'` 로 좁혀서 완화.
-- 스캔/HTML 변환/게시 로직은 shared library `trivyImageScan` step 이 내부적으로 조립 (`jenkins-shared-library/vars/trivyImageScan.groovy`, 파라미터는 `jenkins-shared-library/README.md` 참조). Jenkinsfile 은 다음처럼 한 스테이지만 추가하면 됨:
-
-```groovy
-stage('Image Scan') {
-  steps {
-    trivyImageScan(image: env.IMAGE, tag: env.TAG)
-  }
-}
-```
+- 스캔/HTML 변환/게시 로직은 shared library `trivyImageScan` step 이 내부적으로 조립 (`jenkins-shared-library/vars/trivyImageScan.groovy`, 파라미터는 `jenkins-shared-library/README.md` 참조). `ci()` 가 Image Scan 스테이지로 자동 호출 — 앱 레포 Jenkinsfile 이 직접 부르지 않는다. 게이트 on/off 는 `services.yaml` 의 `scanGate` 값.
 
 ### cosign 컨테이너 + 이미지 서명 — `agent.podTemplates.kaniko` 확장
 
@@ -279,15 +244,7 @@ stage('Image Scan') {
 - **digest 기준 서명** — `kanikoBuild` 가 `--digest-file` 로 기록한 push 이미지 digest 를 읽어 `cosign sign <image>@<digest>` 실행. 태그가 아닌 불변 digest 로 서명.
 - **cosign v2 · 레거시 서명 포맷 · tlog 미사용** — 이미지는 자체 빌드 `ghcr.io/ggingggang/cosign:2.4.1` (`cosign-image/Dockerfile`: 공식 v2 distroless 에서 바이너리만 추출해 alpine 탑재). 사유: 공식 v2 이미지는 shell 이 없어 사이드카 불가, v3 는 레거시 포맷 서명이 제거됐는데 **Kyverno 는 v3 bundle 의 raw key 검증을 미지원**(kyverno#16267 — 수정 PR #16270 진행 중), bitnami 등 서드파티는 버전 태그를 내려 재현성 불가. v2 `--tlog-upload=false` 로 외부(Rekor) 호출 없이 자체완결 서명 — 검증측 Kyverno `rekor.ignoreTlog: true` 와 세트. bundle 지원이 Kyverno 에 릴리스되면 v3 복귀 검토.
 - **podTemplate `imagePullSecrets: ghcr-pull`** — 자체 빌드 cosign 이미지가 private GHCR 소속이라 파드 이미지 pull 에 필요 (기존 공개 이미지들엔 불필요했던 항목).
-- 서명 로직은 shared library `cosignSign` step 이 조립 (`jenkins-shared-library/vars/cosignSign.groovy`). Jenkinsfile 은 한 스테이지만 추가:
-
-```groovy
-stage('Sign') {
-  steps {
-    cosignSign(image: env.IMAGE)
-  }
-}
-```
+- 서명 로직은 shared library `cosignSign` step 이 조립 (`jenkins-shared-library/vars/cosignSign.groovy`). `ci()` 가 `services.yaml` 의 `sign: true` 인 서비스에만 Sign 스테이지를 조건부로 넣는다(`when` 디렉티브) — Jenkinsfile 무수정으로 서명 대상 서비스가 늘어난다.
 
 ### JCasC seed — 환경변수 · 자격증명 · 라이브러리 · 잡
 

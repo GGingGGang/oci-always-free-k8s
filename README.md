@@ -16,7 +16,7 @@ This repo is the entry point. Application code, GitOps state, and CI tooling liv
 | **oci-always-free-k8s** (this repo) | OCI Terraform + Kubernetes infra (VCN/OKE, platform, bootstrap) | in progress |
 | [k8s-gitops](https://github.com/GGingGGang/k8s-gitops) | App layer GitOps — Application CRs + manifests (`manifests/<svc>`) | `core`, `batch`, `auth` live |
 | [app-templates](https://github.com/GGingGGang/app-templates) | Service scaffolds (sed-token stamped) → new `svc-*` repo + `k8s-gitops` | `go-app`, `java-app`, `node-app` done |
-| [jenkins-shared-library](https://github.com/GGingGGang/jenkins-shared-library) | Jenkins Global Pipeline Library (`kanikoBuild`, `trivyImageScan`, `deployBump`) | in use |
+| [jenkins-shared-library](https://github.com/GGingGGang/jenkins-shared-library) | Jenkins Global Pipeline Library — `ci()` entrypoint (build/scan/sign/bump, per-service config in `services.yaml`) | in use |
 | [svc-core](https://github.com/GGingGGang/svc-core) | Schedule domain API (Go/chi) | CI/CD verified end-to-end, domain logic in progress |
 | [svc-batch](https://github.com/GGingGGang/svc-batch) | Reminder/Kafka consumer (Java/Spring Batch) | CI/CD verified end-to-end, deployed and running |
 | [svc-auth](https://github.com/GGingGGang/svc-auth) | Auth/session/token (Node.js/Fastify) | CI/CD verified end-to-end, auth flows in progress |
