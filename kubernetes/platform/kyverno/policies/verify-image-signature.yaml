@@ -7,17 +7,18 @@ spec:
   background: false
   webhookTimeoutSeconds: 30
   rules:
-    - name: verify-svc-auth-signature
+    - name: verify-svc-image-signature
       match:
         any:
           - resources:
               kinds:
                 - Pod
-              namespaces:
-                - auth
+              namespaceSelector:
+                matchLabels:
+                  verify-images: "true"
       verifyImages:
         - imageReferences:
-            - "ghcr.io/ggingggang/svc-auth*"
+            - "ghcr.io/ggingggang/svc-*"
           failureAction: Audit
           mutateDigest: false
           verifyDigest: false

@@ -38,15 +38,15 @@ kubectl get pods -n kyverno                    # admission + reports controller 
 kubectl get clusterpolicy                      # verify-svc-image-signature Ready=True
 
 # 정책은 background: false — admission 시점에만 평가됨. 재admission 을 유발해 확인:
-kubectl -n auth rollout restart deploy auth
+kubectl -n auth rollout restart deploy auth    # core/batch 도 동일 (verify-images: "true" 라벨 NS 전부 대상)
 kubectl get policyreport -n auth               # PASS 카운트 (서명 검증 통과)
-kubectl describe policyreport -n auth | grep -B2 -A6 verify-svc-auth
+kubectl describe policyreport -n auth | grep -B2 -A6 verify-svc-image-signature
 ```
 
 ## 4. 결정
 
-- **Audit 모드 시작** — Enforce 는 서명 없는 이미지를 admission 에서 거부. 현재 서명하는 서비스가 svc-auth 뿐이라 Enforce 로 시작하면 core/batch 가 재시작 시점에 전부 막힘. Audit 리포트 검증 → 전 svc 에 Sign 스테이지 확산 → Enforce 전환 순서.
-- **스코프 `auth` NS + `ghcr.io/ggingggang/svc-auth*` 한정** — 위와 동일 이유. 확산 시 `namespaces`/`imageReferences` 확장.
+- **Audit 모드 시작** — Enforce 는 서명 없는 이미지를 admission 에서 거부. Audit 리포트 검증 → Enforce 전환 순서.
+- **스코프는 `namespaceSelector`(라벨 `verify-images: "true"`) + `ghcr.io/ggingggang/svc-*` 와일드카드** — `jenkins-shared-library`의 `ci()`가 `services.yaml` `defaults.sign: true`로 전 서비스 서명을 이미 깔고 시작해서(신규 서비스도 명시적으로 `sign: false`를 안 주면 자동 서명), 정책 스코프도 정적 나열 대신 라벨 멤버십으로 따라가게 함. 신규 서비스 온보딩 시 이 정책 파일은 무수정 — `namespaces.yaml`에 `verify-images: "true"` 라벨만 추가.
 - **`mutateDigest`/`verifyDigest`: false** — Audit 은 관찰 전용이라 mutation 불가 (kyverno 정책 검증 웹훅이 `mutateDigest=false` 강제). 배포 이미지가 태그(git SHA) 참조라 `verifyDigest` 도 함께 off — 켜두면 서명이 정상이어도 "digest 미참조"로 FAIL 이 찍혀 리포트가 오염됨. **Enforce 전환 시 둘 다 기본(true)으로 되돌려** admission 단계 digest 핀까지 확보.
 - **기본(Cosign) 검증 타입 — `type: SigstoreBundle` 미사용** — Kyverno 1.18 은 SigstoreBundle 에서 raw 공개키(`keys.publicKeys`)를 **조용히 무시**해 검증 불가 (kyverno#16267·#14233, 수정 PR #16270 진행 중 — tlog 유무 불문 "no matching signatures found" 실측). 서명을 cosign v2 레거시 포맷으로 맞추고 성숙한 기본 경로를 사용. bundle 의 key 지원이 릴리스되면 v3/bundle 복귀 검토.
 - **tlog 미사용 · `rekor.ignoreTlog: true`** — 서명이 `--tlog-upload=false`(자체완결, 공개 Rekor 미의존)라 검증도 tlog 조회를 끔. 이 설정 없으면 Rekor 조회 실패로 검증이 깨짐.
@@ -57,7 +57,7 @@ kubectl describe policyreport -n auth | grep -B2 -A6 verify-svc-auth
 
 ## 5. 주의 사항
 
-- **Enforce 전환 전 필수 순서**: core/batch Jenkinsfile 에 `cosignSign` 스테이지 추가 → 전 서비스 재빌드(서명된 digest 로 교체) → 그 다음에만 `failureAction: Enforce`. 미서명 이미지가 도는 상태에서 Enforce 켜면 재시작/재스케줄 때 파드 생성이 거부됨.
-- webhook 은 정책 match 범위(`auth` NS Pod)로 자동 스코프됨 — kyverno 다운 시 영향도 그 범위 안. NS 를 확장할수록 kyverno 가용성이 클러스터 admission 에 직결됨.
+- **Enforce 전환 전 필수 순서**: `verify-images: "true"` 라벨이 붙은 전 NS(auth/core/batch)가 서명된 digest 로 재배포됐는지 확인 → 그 다음에만 `failureAction: Enforce`. 미서명 이미지가 도는 상태에서 Enforce 켜면 재시작/재스케줄 때 파드 생성이 거부됨.
+- webhook 은 정책 match 범위(`verify-images: "true"` 라벨 NS 의 Pod)로 자동 스코프됨 — kyverno 다운 시 영향도 그 범위 안. 라벨 붙은 NS 가 늘수록 kyverno 가용성이 클러스터 admission 에 직결됨.
 - 키 로테이션 시 정책 `publicKeys` 도 함께 교체 — 구 키로 서명된 이미지는 새 키로 검증 실패.
 - **`ghcr-pull` 토큰 만료 = 검증 실패.** Audit 에선 FAIL 리포트로 그치지만 **Enforce 전환 후엔 auth NS 파드 admission 거부로 승격.** 토큰 로테이션 시 kyverno NS 사본도 함께 갱신 — 시크릿 중앙화(OpenBao) 이관 시 단일 소스로 일원화 대상.

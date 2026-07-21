@@ -117,3 +117,7 @@ pod-security.kubernetes.io/audit: restricted
 ### MSA 서비스별 네임스페이스
 
 서비스당 1 NS. 단일 `app` NS 에 몰지 않는 사유: NetworkPolicy(L3/L4) 경계와 Istio AuthorizationPolicy `source.namespaces`(L7) 가 모두 NS 단위라, 동서(east-west) 격리를 NS 경계로 선언하면 정책이 단순하고 실수 여지가 준다. `app`(데모 워크로드)과도 분리 — 데모와 MSA 혼재 방지. `core`/`batch`/`auth` 모두 동일 정책(`restricted` + ambient enrolled)으로 실존 — 서비스 레이어(ArgoCD Application/매니페스트)는 세 서비스 모두 적용 완료(`k8s-gitops` 레포 소관, `../../platform/argocd/README.md` §6 참조).
+
+### `verify-images` 라벨
+
+`core`/`batch`/`auth` 에 `verify-images: "true"`. Kyverno `verify-svc-image-signature` 정책(`../../platform/kyverno/README.md`)이 `namespaceSelector`로 이 라벨을 매칭 — 신규 MSA 서비스 온보딩 시 정책 파일 무수정, 이 라벨만 추가하면 서명 검증 스코프에 들어감. `jenkins-shared-library`의 `ci()`가 `services.yaml` `defaults.sign: true`로 전 서비스 서명을 기본값으로 깔기 때문에 라벨도 서비스 NS 생성 시점에 함께 붙이는 게 원칙(서명 없이 라벨만 먼저 붙이면 Enforce 전환 후 admission 거부 위험 — 위 kyverno README §5 참조).
