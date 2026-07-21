@@ -116,7 +116,7 @@ controller:
     - variant:70.va_d9f17f859e0
     - workflow-api:1384.vdc05a_48f535f
     - workflow-basic-steps:1079.vce64b_a_929c5a_
-    - workflow-cps:4150.ve20ca_b_a_a_2815
+    - workflow-cps:4254.v0c8e228524ea_
     - workflow-durable-task-step:1434.v1b_595c29ddd7
     - workflow-job:1540.v295eccc9778f
     - workflow-multibranch:800.v5f0a_a_660950e
