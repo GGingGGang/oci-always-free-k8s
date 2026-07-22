@@ -21,7 +21,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 | [app-templates](https://github.com/GGingGGang/app-templates) | 서비스 씨앗 (sed 토큰 치환) → 새 `svc-*` 레포 + `k8s-gitops` | `go-app`, `java-app`, `node-app` 완료 |
 | [jenkins-shared-library](https://github.com/GGingGGang/jenkins-shared-library) | Jenkins Global Pipeline Library — `ci()` 진입점 (build/scan/sign/bump, 서비스별 설정은 `services.yaml`) | 사용 중 |
 | [svc-core](https://github.com/GGingGGang/svc-core) | 일정 도메인 API (Go/chi) | CI/CD 완주 검증됨, 도메인 로직 진행 중 |
-| [svc-batch](https://github.com/GGingGGang/svc-batch) | 리마인더/Kafka consumer (Java/Spring Batch) | CI/CD 완주 검증됨, 배포·운영 중 |
+| [svc-batch](https://github.com/GGingGGang/svc-batch) | 리마인더 배치 (Java/Spring Batch) | CI/CD 완주 검증됨, 배포·운영 중 |
 | [svc-auth](https://github.com/GGingGGang/svc-auth) | 인증/세션/토큰 (Node.js/Fastify) | CI/CD 완주 검증됨, 인증 플로우 구현 중 |
 
 > svc-*의 레포는 AI가 관리한다. (개발자 역할)
@@ -40,7 +40,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 | 시크릿        | OpenBao (Vault), OCI KMS auto-unseal                                                                | 완료                                                                                         |
 | 관측         | kube-prometheus-stack (메트릭)                                                                         | 완료 · Loki/Alloy/Tempo/Kiali 예정                                                             |
 | 보안         | Trivy, cosign, Kyverno, PSA, NetworkPolicy                                                          | Trivy(CI 스캔) · cosign(이미지 서명) · Kyverno(verifyImages, Audit) · PSA 사용 중 · NetworkPolicy 예정 |
-| 앱 데이터      | Strimzi/Kafka (KRaft, ephemeral), Redis (캐시)                                                        | 완료                                                                                         |
+| 앱 데이터      | Redis (캐시)                                                                                          | 완료                                                                                         |
 | 오토스케일      | HPA + Prometheus Adapter                                                                            | 예정                                                                                         |
 | DR / 백업    | Velero, OCI Block Volume Backup, Vault Raft Snapshot                                                | 예정                                                                                         |
 | 부하 테스트     | k6                                                                                                  | 예정                                                                                         |
@@ -130,7 +130,6 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 │   │   ├── openbao/            # 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal, ephemeral)
 │   │   ├── monitoring/         # kube-prometheus-stack
 │   │   ├── redis/              # MSA 캐시 (ephemeral, cache-aside)
-│   │   ├── kafka/              # MSA 이벤트 백본 (Strimzi, KRaft, ephemeral)
 │   │   ├── kyverno/            # 정책 엔진 — 이미지 서명 admission 검증
 │   │   └── README.md
 │   ├── test/                   # 일회성 검증
@@ -177,7 +176,7 @@ kubectl get nodes
 
 ### 4. 플랫폼 배포
 
-infra 계층 위에: ArgoCD(GitOps 컨트롤 플레인) + Jenkins(JCasC + Kaniko 동적 빌드) + OpenBao(시크릿 저장소, OCI KMS auto-unseal) + 관측(kube-prometheus-stack) + 데이터 서비스(Redis 캐시 + Strimzi Kafka, `data` NS).
+infra 계층 위에: ArgoCD(GitOps 컨트롤 플레인) + Jenkins(JCasC + Kaniko 동적 빌드) + OpenBao(시크릿 저장소, OCI KMS auto-unseal) + 관측(kube-prometheus-stack) + 데이터 서비스(Redis 캐시, `data` NS).
 
 상세: [`kubernetes/platform/README.md`](../kubernetes/platform/README.md).
 

@@ -2,7 +2,7 @@
 
 OKE worker subnet → HeatWave MySQL (`10.0.201.0/28`, port 3306) 의 L4 reachability + TLS handshake + 인증 + 권한까지 한 번에 검증.
 
-본 테스트가 통과해야 추후 앱이 DB 에 붙을 수 있음. 통과 전에 앱 stack (Strimzi / Redis / 앱 서버) 진입 X.
+본 테스트가 통과해야 추후 앱이 DB 에 붙을 수 있음. 통과 전에 앱 stack (Redis / 앱 서버) 진입 X.
 
 ## 1. 전제 조건
 
