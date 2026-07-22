@@ -40,7 +40,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 | 시크릿        | OpenBao (Vault), OCI KMS auto-unseal                                                                | 완료                                                                                         |
 | 관측         | kube-prometheus-stack (메트릭)                                                                         | 완료 · Loki/Alloy/Tempo/Kiali 예정                                                             |
 | 보안         | Trivy, cosign, Kyverno, PSA, NetworkPolicy                                                          | Trivy(CI 스캔) · cosign(이미지 서명) · Kyverno(verifyImages, Audit) · PSA 사용 중 · NetworkPolicy 예정 |
-| 앱 데이터      | Redis (캐시)                                                                                          | 완료                                                                                         |
+| 앱 데이터      | NATS JetStream (이벤트 백본), Redis (캐시)                                                                | 완료                                                                                         |
 | 오토스케일      | HPA + Prometheus Adapter                                                                            | 예정                                                                                         |
 | DR / 백업    | Velero, OCI Block Volume Backup, Vault Raft Snapshot                                                | 예정                                                                                         |
 | 부하 테스트     | k6                                                                                                  | 예정                                                                                         |
@@ -130,6 +130,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 │   │   ├── openbao/            # 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal, ephemeral)
 │   │   ├── monitoring/         # kube-prometheus-stack
 │   │   ├── redis/              # MSA 캐시 (ephemeral, cache-aside)
+│   │   ├── nats/               # MSA 이벤트 백본 (JetStream file store)
 │   │   ├── kyverno/            # 정책 엔진 — 이미지 서명 admission 검증
 │   │   └── README.md
 │   ├── test/                   # 일회성 검증
@@ -176,7 +177,7 @@ kubectl get nodes
 
 ### 4. 플랫폼 배포
 
-infra 계층 위에: ArgoCD(GitOps 컨트롤 플레인) + Jenkins(JCasC + Kaniko 동적 빌드) + OpenBao(시크릿 저장소, OCI KMS auto-unseal) + 관측(kube-prometheus-stack) + 데이터 서비스(Redis 캐시, `data` NS).
+infra 계층 위에: ArgoCD(GitOps 컨트롤 플레인) + Jenkins(JCasC + Kaniko 동적 빌드) + OpenBao(시크릿 저장소, OCI KMS auto-unseal) + 관측(kube-prometheus-stack) + 데이터 서비스(Redis 캐시 + NATS JetStream, `data` NS).
 
 상세: [`kubernetes/platform/README.md`](../kubernetes/platform/README.md).
 

@@ -57,7 +57,7 @@ NS 는 baseline 이지만 Pod 는 restricted 수준 — `runAsNonRoot`(999) + `d
 
 ### data 네임스페이스 — app 과 분리
 
-백킹 데이터 서비스(Redis)를 `app`(restricted, 워크로드)과 분리. `data` 는 baseline + ambient enrolled — app↔redis hop 은 ztunnel L4 mTLS.
+백킹 데이터 서비스(Redis, NATS)를 `app`(restricted, 워크로드)과 분리. `data` 는 baseline + ambient enrolled — app↔redis hop 은 ztunnel L4 mTLS.
 
 ## 5. 주의 사항
 

@@ -1,0 +1,93 @@
+config:
+  cluster:
+    enabled: false
+
+  jetstream:
+    enabled: true
+    fileStore:
+      enabled: true
+      pvc:
+        enabled: true
+        size: 50Gi
+        storageClassName: oci-bv
+      maxSize: 45Gi
+    memoryStore:
+      enabled: false
+
+  monitor:
+    enabled: true
+
+container:
+  image:
+    fullImageName: docker.io/library/nats:2.14.2-alpine
+  env:
+    GOMEMLIMIT: 448MiB
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+  merge:
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
+
+reloader:
+  enabled: true
+  image:
+    fullImageName: docker.io/natsio/nats-server-config-reloader:0.23.0
+  merge:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 64Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
+
+promExporter:
+  enabled: true
+  image:
+    fullImageName: docker.io/natsio/prometheus-nats-exporter:0.20.1
+  merge:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 64Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
+  podMonitor:
+    enabled: true
+    merge:
+      metadata:
+        labels:
+          release: kps
+
+podTemplate:
+  merge:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+podDisruptionBudget:
+  enabled: false
+
+natsBox:
+  enabled: false

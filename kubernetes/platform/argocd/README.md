@@ -155,6 +155,7 @@ argocd/
     ├── jenkins.yaml             (helm) + jenkins-rbac.yaml / jenkins-httproute.yaml (raw)
     ├── argocd.yaml              (helm, self-manage) + argocd-httproute.yaml (raw)
     ├── redis.yaml               (raw)
+    ├── nats.yaml                (helm, chart + $values 2-source)
     ├── kyverno.yaml             (helm) + kyverno-policies.yaml (raw: ClusterPolicy)
     └── app-layer.yaml           앱 레이어 진입 포인터 → k8s-gitops/argocd
 ```
@@ -205,7 +206,7 @@ adopt 정상 판정: diff 가 `app.kubernetes.io/instance` 라벨 + `argocd.argo
 | 3 | cert-manager-resources, kps, jenkins-rbac |
 | 4 | istio-gateway, jenkins, argocd (self) |
 | 5 | jenkins-httproute, argocd-httproute, monitoring-httproute, app-layer-root |
-| 6 | redis, kyverno |
+| 6 | redis, nats, kyverno |
 | 7 | kyverno-policies (ClusterPolicy — kyverno CRD 선행) |
 
 `argocd` 자기 관리(self-manage)는 잘못 sync 하면 자기 손을 자르므로 wave 4 + **수동 sync 전용**. 하드닝 turn 에서도 selfHeal 활성은 마지막.
@@ -223,6 +224,7 @@ adopt 정상 판정: diff 가 `app.kubernetes.io/instance` 라벨 + `argocd.argo
 | kps | `75.0.0` |
 | jenkins | `5.9.26` |
 | argocd | `7.7.23` |
+| nats | `2.14.2` |
 | kyverno | `3.8.2` |
 
 upgrade 시엔 helm 으로 먼저 올린 뒤(`helm upgrade`) `helm list -A` 로 실측값을 다시 박거나, range 로 풀고 자동 추종. 범위 핀은 새 patch 가 나오면 OutOfSync 노이즈가 생기므로 adopt 단계에선 exact 유지.

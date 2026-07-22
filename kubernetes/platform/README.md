@@ -1,6 +1,6 @@
 # platform
 
-infra 부트스트랩(Gateway / TLS / DNS) 위에서 동작하는 플랫폼 계층. CI/CD(ArgoCD, Jenkins) + 시크릿(OpenBao) + 관측(kube-prometheus-stack) + 데이터 백킹(Redis — `data` NS) 도입.
+infra 부트스트랩(Gateway / TLS / DNS) 위에서 동작하는 플랫폼 계층. CI/CD(ArgoCD, Jenkins) + 시크릿(OpenBao) + 관측(kube-prometheus-stack) + 데이터 백킹(Redis, NATS — `data` NS) 도입.
 
 각 폴더는 독립 컴포넌트 단위. helm 릴리즈 단위로 의존이 닫혀있어 개별 turn으로 진행 가능.
 
@@ -13,6 +13,7 @@ infra 부트스트랩(Gateway / TLS / DNS) 위에서 동작하는 플랫폼 계�
 | `openbao/` | 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal, ephemeral) | openbao/openbao `~0.28.0` | `vault` (PSA baseline) | 없음 (port-forward) |
 | `monitoring/` | 관측 (메트릭/알림/대시보드) | prometheus-community/kube-prometheus-stack `~75.0.0` | `monitoring` (PSA baseline) | tailnet (parked — `grafana.ggang.cloud` 주석 처리) |
 | `redis/` | MSA 캐시 (cache-aside, ephemeral) | — (raw manifest, `redis:*-alpine`) | `data` (PSA baseline, ambient) | 없음 (ClusterIP, in-mesh) |
+| `nats/` | MSA 이벤트 백본 (JetStream file store) | nats/nats `2.14.2` | `data` (PSA baseline, ambient) | 없음 (ClusterIP, in-mesh) |
 | `kyverno/` | 정책 엔진 — 이미지 서명 admission 검증 (cosign 공급망 체인) | kyverno/kyverno `3.8.2` + ClusterPolicy | `kyverno` (PSA baseline) | 없음 |
 
 ## 2. 전제 조건 (infra 의존)
@@ -35,7 +36,8 @@ infra 부트스트랩 완료 후:
 3. openbao      terraform (kms + iam) 선행 → helm + operator init
 4. monitoring   helm (kube-prometheus-stack) + httproute
 5. redis        kubectl apply (raw manifest, data NS)
-6. kyverno      helm → ClusterPolicy (정책은 kyverno CRD 선행)
+6. nats         helm (JetStream file store, oci-bv PVC 50Gi)
+7. kyverno      helm → ClusterPolicy (정책은 kyverno CRD 선행)
 ```
 
 대체로 상호 독립 — argocd/jenkins/monitoring/redis 는 순서 무관. openbao 만 terraform 선행(KMS 키 + Dynamic Group/Policy), kyverno 정책(ClusterPolicy)은 kyverno 차트(CRD) 선행. 각 단계 상세는 해당 폴더 README 참조.
@@ -44,7 +46,7 @@ infra 부트스트랩 완료 후:
 
 admin UI(argocd/jenkins/grafana) HTTPRoute는 `public-gateway`의 `https-wildcard` listener에 attach하되 **tailnet 컷오버로 대부분 parked**(주석) — 운영 접근은 tailnet ClusterIP. 현재 active public 인입은 Jenkins webhook(`ci-hook.ggang.cloud` `/github-webhook/`, HMAC)뿐. `*.ggang.cloud` 와일드카드 인증서로 Gateway 단일 TLS 종료, HTTP→HTTPS redirect는 `../infra/istio/http-redirect.yaml` catch-all.
 
-**데이터 계층(redis)은 외부 노출 0** — ClusterIP, mesh 내부 caller 전용. 모든 내부 hop은 Istio Ambient(ztunnel) L4 mTLS. external-dns가 active HTTPRoute의 `hostnames`를 source로 Cloudflare A 레코드 등록.
+**데이터 계층(redis/nats)은 외부 노출 0** — ClusterIP, mesh 내부 caller 전용. 모든 내부 hop은 Istio Ambient(ztunnel) L4 mTLS. external-dns가 active HTTPRoute의 `hostnames`를 source로 Cloudflare A 레코드 등록.
 
 ## 5. GitOps 모델
 
@@ -77,7 +79,7 @@ placeholder · helm 버전 핀 · 5섹션 README 구조 등 공통 컨벤션은 
 ## 7. 다음 후보
 
 - monitoring 후속 — Loki / Alloy / Tempo / Kiali (kube-prometheus-stack 완료)
-- 데이터 계층 하드닝 — Redis `requirepass` + NetworkPolicy (현재 in-mesh 무인증)
+- 데이터 계층 하드닝 — Redis `requirepass` / NATS account 분리 + NetworkPolicy (현재 in-mesh 무인증)
 - 시크릿 이관 — Cloudflare / DB / GHCR / webhook Secret → OpenBao (Agent Injector / ESO 비교)
 - ArgoCD SSO — `dex.enabled: true` + GitHub OAuth, `admin` 사용자 비활성
-- MSA 워크로드 — redis 소비하는 워크로드 (별도 앱 레포 + Jenkins 파이프라인)
+- MSA 워크로드 — redis/nats 소비하는 producer/consumer (별도 앱 레포 + Jenkins 파이프라인)
