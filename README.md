@@ -127,7 +127,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 │   ├── platform/               # CI/CD · 플랫폼 · 데이터 서비스
 │   │   ├── argocd/             # GitOps 컨트롤 플레인 (self-managed app-of-apps + 앱 레이어 진입점)
 │   │   ├── jenkins/            # JCasC + Kaniko 동적 빌드
-│   │   ├── openbao/            # 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal)
+│   │   ├── openbao/            # 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal, ephemeral)
 │   │   ├── monitoring/         # kube-prometheus-stack
 │   │   ├── redis/              # MSA 캐시 (ephemeral, cache-aside)
 │   │   ├── kafka/              # MSA 이벤트 백본 (Strimzi, KRaft, ephemeral)

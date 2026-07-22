@@ -1,6 +1,6 @@
 # OpenBao
 
-시크릿 저장소. Raft 단일 replica + OCI KMS auto-unseal (instance principal). Agent Injector 동반.
+시크릿 저장소. Raft 단일 replica + OCI KMS auto-unseal (instance principal). Agent Injector 동반. raft 데이터는 **파드 수명**(블록 볼륨 미사용) — §4 `dataStorage` 비활성 참조.
 
 참조:
 - https://github.com/openbao/openbao-helm (chart `openbao/openbao`)
@@ -10,7 +10,7 @@
 
 - terraform apply 완료 — `kms` 모듈 (Vault + unseal key) + `iam` 모듈 (Dynamic Group + Policy). `terraform output`으로 `kms_*` 3종 확인
 - `vault` 네임스페이스 + PSA `enforce=baseline` (`../../infra/namespaces/`)
-- Block Volume CSI (`oci-bv` StorageClass) — PV 50Gi 1칸 소모 (분배표 1순위)
+- 블록 볼륨 불요 — `server.dataStorage.enabled: false`. PVC/PV 를 만들지 않고 raft 가 컨테이너 계층에 씀
 - Helm 3.6+
 - 권장 버전: openbao/openbao chart `~0.28.0` (2026-06 작성 시점 0.28.3, 설치 전 `helm search repo openbao/openbao --versions` 확인)
 
@@ -52,14 +52,9 @@ kubectl exec -n vault openbao-0 -- bao status
 # 기대: Initialized=true, Sealed=false, Recovery Seal Type=shamir, Seal Type 항목에 ocikms 반영
 ```
 
-auto-unseal 동작 검증 — pod 재시작 후 사람 개입 없이 unseal 되는지:
+auto-unseal 동작은 **init 직후 상태로 확인** — `bao operator init` 이 사람의 unseal 키 입력 없이 끝나고 곧바로 `Sealed=false` 면 KMS seal 이 동작한 것.
 
-```bash
-kubectl delete pod -n vault openbao-0
-kubectl wait -n vault --for=condition=Ready pod/openbao-0 --timeout=300s
-kubectl exec -n vault openbao-0 -- bao status | grep Sealed
-# 기대: Sealed  false
-```
+> 파드 재삭제로 auto-unseal 을 재검증하지 말 것. raft 가 파드 수명이라 재시작은 **저장 데이터 전소 + uninitialized 복귀**다 (§5).
 
 UI는 외부 비노출 — 필요 시:
 
@@ -89,10 +84,10 @@ HSM 키는 키 버전당 과금, software 키는 무료 — Always Free 0원 유
 
 ### Raft 단일 replica
 
-3 replica HA는 노드 2개 환경에서 anti-affinity 미충족 + quorum(2/3) 의미 없음. 단일 replica + auto-unseal + PV 영속 + (후속) snapshot 백업 조합:
+3 replica HA는 노드 2개 환경에서 anti-affinity 미충족 + quorum(2/3) 의미 없음. 단일 replica + auto-unseal 조합:
 
 - pod 다운 시: 이미 주입된 시크릿은 각 Pod 메모리에 유지, 신규 Pod만 시크릿 대기
-- PV 생존 시 재기동 ~5분 (auto-unseal이라 무인). PV 손상 시 snapshot 복원
+- 재기동 ~5분, auto-unseal 이라 무인. 저장 데이터는 남지 않음
 
 ### TLS 종료 위임 (tls_disable)
 
@@ -103,6 +98,10 @@ listener 평문 — `vault` 네임스페이스가 Istio Ambient에 enrolled되�
 annotation 기반 sidecar 주입을 기본 채택하되, `ghcr-push`/`ghcr-pull`처럼 **Pod 생성 이전에 이미 존재해야 하는 k8s Secret 객체**(imagePullSecret, projected volume 참조)는 Injector 로 구조적으로 만들 수 없음 — Injector는 Pod 내부에 런타임 파일을 주입할 뿐 Secret 오브젝트 자체를 사전 생성하지 못하는 닭-달걀 문제. 이 부류는 **ESO 채택 확정**. 그 외(런타임에 파일/env 로 받아도 되는 시크릿, 예: DB 자격증명)는 Injector 유지. 두 방식이 시크릿 종류별로 공존.
 
 ## 5. 주의 사항
+
+### 파드 재시작 = 재초기화
+
+raft 가 파드 수명이라 재시작하면 저장된 시크릿이 전부 사라지고 uninitialized 로 올라온다. `bao operator init` 재실행 + recovery key/root token 재발급 필요. 시크릿을 OpenBao 로 이관할수록 이 비용이 커진다.
 
 ### recovery key
 

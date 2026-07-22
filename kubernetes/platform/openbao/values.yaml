@@ -10,9 +10,7 @@ server:
       memory: 512Mi
 
   dataStorage:
-    enabled: true
-    size: 50Gi
-    storageClass: oci-bv
+    enabled: false
 
   auditStorage:
     enabled: false

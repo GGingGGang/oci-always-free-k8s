@@ -21,7 +21,7 @@ kubernetes/
 ├── platform/             # CI/CD · 관측 · 보안 등 플랫폼 컴포넌트
 │   ├── argocd/           # GitOps 컨트롤 플레인 (helm + HTTPRoute)
 │   ├── jenkins/          # JCasC + emptyDir, 동적 agent (+ Kaniko podTemplate in build NS)
-│   ├── openbao/          # 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal + Injector)
+│   ├── openbao/          # 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal + Injector, ephemeral)
 │   ├── monitoring/       # kube-prometheus-stack (Prometheus/Alertmanager/Grafana)
 │   ├── redis/            # MSA 캐시 (ephemeral, cache-aside, data NS)
 │   ├── kafka/            # MSA 이벤트 백본 (Strimzi, KRaft, ephemeral, data NS)
