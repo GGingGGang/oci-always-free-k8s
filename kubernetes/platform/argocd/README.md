@@ -146,6 +146,7 @@ argocd/
 ├── project.yaml        AppProject "platform" — sourceRepo/destination/리소스 화이트리스트
 ├── root.yaml           Application "platform-root" — apps/ 디렉터리를 가리키는 app-of-apps
 └── apps/               root 가 관리하는 자식 Application 들
+    ├── platform-project.yaml    project.yaml(AppProject) 자체를 GitOps 편입 — automated
     ├── namespaces.yaml          (raw)
     ├── cert-manager.yaml        (helm) + cert-manager-resources.yaml (raw: ClusterIssuer/Certificate)
     ├── external-dns.yaml        (helm)
@@ -182,7 +183,8 @@ platform-root (본 레포, 인프라)
 ### 부트스트랩
 
 ```bash
-# AppProject + root 1회 적용 (root 가 이후 apps/ 를 관리)
+# AppProject + root 1회 적용 (닭-달걀 — AppProject 가 있어야 root 가 sync 됨.
+# 이후의 project.yaml 변경은 apps/platform-project.yaml 이 automated 로 추종)
 kubectl apply -f project.yaml
 kubectl apply -f root.yaml
 
@@ -200,7 +202,7 @@ adopt 정상 판정: diff 가 `app.kubernetes.io/instance` 라벨 + `argocd.argo
 
 | wave | Application |
 |------|-------------|
-| 0 | namespaces |
+| 0 | platform-project (AppProject — 모든 Application 이 참조), namespaces |
 | 1 | cert-manager, istio-base |
 | 2 | external-dns, metrics-server, istiod, istio-cni, ztunnel |
 | 3 | cert-manager-resources, kps, jenkins-rbac |
