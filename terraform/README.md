@@ -22,15 +22,37 @@ cp terraform.tfvars.example terraform.tfvars
 
 `private_key_path`는 `./secrets/oci-api-key.pem` 권장 (`secrets/`는 `.gitignore` 적용).
 
-### 2-2. 적용
+### 2-2. remote state 백엔드
+
+state 는 OCI Object Storage 의 네이티브 `oci` 백엔드에 저장 (Terraform ≥ 1.12 필요 — 백엔드 자체가 1.12.0 도입, changelog #34465, 2026-07 확인). 잠금은 Object Storage `If-None-Match` 헤더 기반으로 백엔드가 자체 지원.
+
+버킷은 1회 수동 생성 (state 를 담을 통이라 terraform 자신으로 못 만듦 — 닭-달걀):
 
 ```bash
-terraform init
+oci os bucket create --name tfstate \
+  --compartment-id <tenancy-ocid> --versioning Enabled
+```
+
+`--versioning Enabled` — state 파일 이력 보존 (잘못된 apply 후 이전 버전 복구 경로).
+
+백엔드 값은 커밋하지 않고 `backend.local.hcl` 로 주입 (`*.local.*` gitignore):
+
+```bash
+cp backend.hcl.example backend.local.hcl
+# namespace(oci os ns get), region 채움
+```
+
+### 2-3. 적용
+
+```bash
+terraform init -backend-config=backend.local.hcl
 terraform plan
 terraform apply
 ```
 
-### 2-3. kubeconfig 생성
+기존 로컬 state 에서 이관할 때는 `terraform init -backend-config=backend.local.hcl -migrate-state` — 이관 후 `terraform plan` 이 no-op 인지 확인하고 로컬 `terraform.tfstate*` 는 백업 후 삭제 (state 에 `db_admin_password` 등 민감값 포함 — 로컬 잔존 사본 자체가 리스크).
+
+### 2-4. kubeconfig 생성
 
 ```bash
 oci ce cluster create-kubeconfig \

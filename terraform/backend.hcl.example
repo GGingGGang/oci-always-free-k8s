@@ -1,0 +1,5 @@
+bucket    = "tfstate"
+namespace = "<os-namespace>"                       # oci os ns get
+region    = "<your-region>"
+key       = "oci-always-free-k8s/terraform.tfstate"
+auth      = "APIKey"                               # ~/.oci/config DEFAULT 프로필
