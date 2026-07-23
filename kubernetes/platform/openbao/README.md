@@ -10,7 +10,7 @@
 
 - terraform apply 완료 — `kms` 모듈 (Vault + unseal key) + `iam` 모듈 (Dynamic Group + Policy). `terraform output`으로 `kms_*` 3종 확인
 - `vault` 네임스페이스 + PSA `enforce=baseline` (`../../infra/namespaces/`)
-- 블록 볼륨 불요 — `server.dataStorage.enabled: false`. PVC/PV 를 만들지 않고 raft 가 컨테이너 계층에 씀
+- 블록 볼륨 불요 — `server.dataStorage.enabled: false`. 대신 `server.volumes`/`volumeMounts` 로 emptyDir 를 `/openbao/data` 에 마운트 필수 — 이미지에 이 디렉터리가 없어 미마운트 시 raft 기동 실패(`failed to open bolt file ... no such file or directory`)
 - Helm 3.6+
 - 권장 버전: openbao/openbao chart `~0.28.0` (2026-06 작성 시점 0.28.3, 설치 전 `helm search repo openbao/openbao --versions` 확인)
 
