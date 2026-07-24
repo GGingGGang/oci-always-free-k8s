@@ -216,7 +216,7 @@ cache + memory 폭주 회피 args (Jenkinsfile 에서 주입):
 
 **`--ignore-path` 필수 — kaniko ↔ durable-task hang**: kaniko 는 최종 이미지 fs 를 컨테이너 `/` 에 풀며 debug 이미지의 shell(`/busybox`)을 덮어쓴다. 그러면 Jenkins durable-task wrapper 가 step 종료코드(`jenkins-result.txt`)를 못 써서 — **이미지는 GHCR push 성공인데 잡은 무한 hang**. `/busybox`(shell)와 `/home/jenkins`(agent workspace) 를 ignore-path 로 보존하면 해소. 증상 식별: 살아있는 `jnlp` 컨테이너로 `find /home/jenkins/agent/workspace -name jenkins-result.txt` → 파일 부재면 이 케이스.
 
-위 `/kaniko/executor` 옵션들은 shared library `kanikoBuild` step 이 내부적으로 조립한다 (`jenkins-shared-library/vars/kanikoBuild.groovy`). 앱 레포 `Jenkinsfile` 은 raw kaniko 호출도, 개별 스테이지 나열도 하지 않고 `ci()` 메타 step 하나로 전체 파이프라인(Build & Push → Image Scan → Sign → Bump)을 조립한다:
+위 `/kaniko/executor` 옵션들은 shared library `kanikoBuild` step 이 내부적으로 조립한다 (`jenkins-shared-library/vars/kanikoBuild.groovy`). 앱 레포 `Jenkinsfile` 은 raw kaniko 호출도, 개별 스테이지 나열도 하지 않고 `ci()` 메타 step 하나로 전체 파이프라인(Test → Build & Push → Image Scan → Sign → Bump)을 조립한다:
 
 ```groovy
 @Library('shared') _
@@ -224,7 +224,7 @@ cache + memory 폭주 회피 args (Jenkinsfile 에서 주입):
 ci(service: 'core')
 ```
 
-서비스별로 갈리는 값(스캔 게이트, 서명 여부)은 Jenkinsfile 이 아니라 shared library 의 `resources/ci/services.yaml` 한 파일에 모여 있다 — 새 서비스 추가·설정 변경이 그 파일 한 줄로 끝나고 `ci.groovy`/Jenkinsfile 은 무수정. `services.yaml` 파싱에 `installPlugins` 의 `pipeline-utility-steps`(`readYaml` 스텝) 필요.
+서비스별로 갈리는 값(스캔 게이트, 서명 여부)과 언어별 Test 게이트(테스트 이미지·커맨드)는 Jenkinsfile 이 아니라 shared library 의 `resources/ci/services.yaml` 한 파일에 모여 있다 — 새 서비스 추가·설정 변경이 그 파일 한 줄로 끝나고 `ci.groovy`/Jenkinsfile 은 무수정. `services.yaml` 파싱에 `installPlugins` 의 `pipeline-utility-steps`(`readYaml` 스텝) 필요. Test 스테이지가 쓰는 `test` 컨테이너는 본 `values.yaml` 의 kaniko podTemplate 이 아니라 `ci()` 가 `inheritFrom` + yaml merge 로 빌드 시점에 얹는다 — JCasC 템플릿엔 없는 컨테이너가 파드에 하나 더 뜨는 게 정상.
 
 `ci()`/`kanikoBuild`/`deployBump` 상세 파라미터는 [`jenkins-shared-library`](https://github.com/GGingGGang/jenkins-shared-library) 레포의 README 참조.
 
