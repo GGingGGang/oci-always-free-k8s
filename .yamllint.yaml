@@ -1,0 +1,5 @@
+extends: default
+
+rules:
+  document-start: disable # k8s 매니페스트 관용 — 단일 문서 파일에 --- 미강제
+  line-length: disable # values/JCasC 의 URL·명령 문자열이 80자 상회 — 폭 제한 미운영

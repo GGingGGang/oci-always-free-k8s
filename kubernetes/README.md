@@ -4,6 +4,8 @@ OKE 클러스터 위에서 동작하는 Kubernetes 매니페스트.
 
 각 컴포넌트 폴더에 매니페스트(`.yaml`) + helm values + README. 모든 README는 5섹션 표준 (전제 조건 / 설치 / 검증 / 결정 / 주의 사항).
 
+본 트리의 yaml 은 GitHub Actions `yaml-lint` 워크플로가 push/PR 마다 검사한다 — 규칙은 레포 루트 `.yamllint.yaml` (`document-start`/`line-length` 만 완화, 그 외 기본 규칙 전부 적용, `--strict` 차단).
+
 ## 디렉토리
 
 ```
