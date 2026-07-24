@@ -101,7 +101,7 @@ nats-box 는 상주시키지 않고 필요할 때 일회성 파드로(§3). PDB 
 
 ### 인증 미설정 — in-mesh 한정
 
-계정/사용자 없음. ClusterIP 라 외부 노출 0, ambient mesh 내부 접근만. 멀티테넌트로 확장 시 account 분리(`app` / `cicd`) + nkey/creds(OpenBao 발급) + NetworkPolicy.
+계정/사용자 없음. ClusterIP 라 외부 노출 0, ambient mesh 내부 접근만. 멀티테넌트로 확장 시 account 분리(`app` / `cicd`) + nkey/creds(OpenBao 발급) + AuthorizationPolicy 호출자 제한.
 
 ### stream max_bytes 미설정 시 캡이 서버 단위
 

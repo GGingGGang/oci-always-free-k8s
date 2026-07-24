@@ -121,15 +121,14 @@ NLB가 TCP passthrough이므로 TLS 종료는 Gateway envoy가 책임. mTLS pass
 
 ## 5. 주의 사항
 
-### Cilium chaining 도입 시 CNI 순서 충돌 가능
+### Cilium chaining — 검토 후 미채택 (2026-07-24 확정)
 
-본 클러스터는 추후 Cilium chaining (`generic-veth` 모드)을 Flannel 위에 올릴 예정. 그 시점에 CNI chain 순서:
+Flannel 이 NetworkPolicy 를 집행하지 않는 갭(선언해도 무시됨)을 메우기 위해 Cilium chaining(`generic-veth`) 도입을 검토했으나 미채택.
 
-```
-Flannel  →  Cilium (NetworkPolicy + Hubble)  →  Istio CNI (ambient redirect)
-```
-
-Istio CNI는 `cni.chained: true`로 설정되어 마지막 위치를 기대함. Cilium chaining 설치 매니페스트에서 `cni-conf-path` 우선순위를 확인하고 충돌 시 `cniBinDir` / `cniConfDir` 명시 override 필요.
+- OKE `cni_type` 은 클러스터 생성 후 변경 불가(출처: docs.oracle.com Pod Networking, 확인 2026-07-10) → 재생성 없는 경로는 chaining 뿐이었음.
+- 그러나 chaining 으로 얻는 것은 NetworkPolicy + Hubble 뿐(Cilium dataplane 기능은 봉인)이고, 비용은 Flannel → Cilium → Istio CNI 3-way 체인 운영. 체인 파손 = 클러스터 전체 네트워크 장애라 스테이징 없는 단일 클러스터에서 리스크 비대칭.
+- 동서(east-west) 통제는 ambient 로 대체: PeerAuthentication STRICT + AuthorizationPolicy(mTLS identity 기반, enrolled NS 한정). mesh 밖 통제(CIDR egress — 예: 노드 metadata service, 비 enrolled NS)는 불가한 갭으로 수용하고 각 컴포넌트 README 에 명시.
+- 재검토 조건: 클러스터 재생성 시점에 chaining 이 아닌 Cilium primary(또는 VCN-Native)로 상향 검토.
 
 ### Certificate Secret 의존
 

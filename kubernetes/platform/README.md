@@ -79,7 +79,7 @@ placeholder · helm 버전 핀 · 5섹션 README 구조 등 공통 컨벤션은 
 ## 7. 다음 후보
 
 - monitoring 후속 — Loki / Alloy / Tempo / Kiali (kube-prometheus-stack 완료)
-- 데이터 계층 하드닝 — Redis `requirepass` / NATS account 분리 + NetworkPolicy (현재 in-mesh 무인증)
+- 데이터 계층 하드닝 — Redis `requirepass` / NATS account 분리 + AuthorizationPolicy 호출자 제한 (현재 in-mesh 무인증)
 - 시크릿 이관 — Cloudflare / DB / GHCR / webhook Secret → OpenBao (Agent Injector / ESO 비교)
 - ArgoCD SSO — `dex.enabled: true` + GitHub OAuth, `admin` 사용자 비활성
 - MSA 워크로드 — redis/nats 소비하는 producer/consumer (별도 앱 레포 + Jenkins 파이프라인)

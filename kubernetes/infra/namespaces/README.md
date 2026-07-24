@@ -116,7 +116,7 @@ pod-security.kubernetes.io/audit: restricted
 
 ### MSA 서비스별 네임스페이스
 
-서비스당 1 NS. 단일 `app` NS 에 몰지 않는 사유: NetworkPolicy(L3/L4) 경계와 Istio AuthorizationPolicy `source.namespaces`(L7) 가 모두 NS 단위라, 동서(east-west) 격리를 NS 경계로 선언하면 정책이 단순하고 실수 여지가 준다. `app`(데모 워크로드)과도 분리 — 데모와 MSA 혼재 방지. `core`/`batch`/`auth` 모두 동일 정책(`restricted` + ambient enrolled)으로 실존 — 서비스 레이어(ArgoCD Application/매니페스트)는 세 서비스 모두 적용 완료(`k8s-gitops` 레포 소관, `../../platform/argocd/README.md` §6 참조).
+서비스당 1 NS. 단일 `app` NS 에 몰지 않는 사유: 동서(east-west) 격리 정책(Istio AuthorizationPolicy `source.namespaces`)이 NS 단위 경계라, NS 경계로 선언하면 정책이 단순하고 실수 여지가 준다. `app`(데모 워크로드)과도 분리 — 데모와 MSA 혼재 방지. `core`/`batch`/`auth` 모두 동일 정책(`restricted` + ambient enrolled)으로 실존 — 서비스 레이어(ArgoCD Application/매니페스트)는 세 서비스 모두 적용 완료(`k8s-gitops` 레포 소관, `../../platform/argocd/README.md` §6 참조).
 
 ### `verify-images` 라벨
 

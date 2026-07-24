@@ -76,7 +76,7 @@ API key 방식 비채택 — 키 파일을 Pod에 배포/회전하는 부담 제
 폭발 반경 트레이드오프: instance principal은 노드 단위 신원이라, **metadata service(169.254.169.254)에 닿는 모든 Pod이 같은 권한 획득 가능**. 완화:
 
 - Policy를 `use keys` + `target.key.id` 단일 키로 한정 — 탈취해도 unseal 키 encrypt/decrypt만 가능, 키 자체 export 불가
-- metadata service 접근 차단(NetworkPolicy/AuthorizationPolicy)은 후속 보안 turn 항목
+- metadata service 접근 차단은 CIDR egress 정책이 필요해 현행 CNI(Flannel — 정책 CNI 미도입)로는 불가. 노드 레거시 IMDS(v1) 엔드포인트 비활성화의 OKE 적용 가능 여부 확인 후 완화 검토
 
 ### software-protected key
 

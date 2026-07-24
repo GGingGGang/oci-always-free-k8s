@@ -63,7 +63,7 @@ NS 는 baseline 이지만 Pod 는 restricted 수준 — `runAsNonRoot`(999) + `d
 
 ### 인증 미설정 — in-mesh 한정
 
-현재 `requirepass` 없음. ClusterIP 라 외부 노출 0, ambient mesh 내부 접근만. 멀티테넌트/민감 캐시로 확장 시 `requirepass`(OpenBao 발급) + NetworkPolicy 로 호출자 제한. OpenBao 이관 후보.
+현재 `requirepass` 없음. ClusterIP 라 외부 노출 0, ambient mesh 내부 접근만. 멀티테넌트/민감 캐시로 확장 시 `requirepass`(OpenBao 발급) + AuthorizationPolicy 로 호출자 제한. OpenBao 이관 후보.
 
 ### 재시작 = 캐시 비움
 
