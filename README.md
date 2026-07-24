@@ -30,7 +30,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 
 | 계층         | 컴포넌트                                                                                                | 상태                                                                                         |
 | ---------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| IaC        | Terraform (remote state — OCI Object Storage `oci` 백엔드)                                            | 완료                                                                                         |
+| IaC        | Terraform (remote state — OCI Object Storage `oci` 백엔드) · GitHub Actions CI (fmt/validate)         | 완료                                                                                         |
 | 컨테이너       | OKE Basic, Flannel Overlay, containerd                                                              | 완료                                                                                         |
 | 메시 / 게이트웨이 | Gateway API, Istio Ambient, NLB                                                                     | 완료                                                                                         |
 | DNS        | external-dns + Cloudflare                                                                           | 완료                                                                                         |
@@ -39,7 +39,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 | 앱 (MSA)    | core (Go/chi), batch (Java/Spring Batch), auth (Node.js/Fastify) → Kaniko/GHCR → ArgoCD app-of-apps | 진행 중                                                                                       |
 | 시크릿        | OpenBao (Vault), OCI KMS auto-unseal                                                                | 완료                                                                                         |
 | 관측         | kube-prometheus-stack (메트릭)                                                                         | 완료 · Loki/Alloy/Tempo/Kiali 예정                                                             |
-| 보안         | Trivy, cosign, Kyverno, PSA, NetworkPolicy                                                          | Trivy(CI 스캔) · cosign(이미지 서명) · Kyverno(verifyImages, Audit) · PSA 사용 중 · NetworkPolicy 예정 |
+| 보안         | Trivy, cosign, Kyverno, PSA, Istio mTLS/AuthorizationPolicy                                         | Trivy(CI 스캔) · cosign(이미지 서명) · Kyverno(verifyImages, Audit) · PSA 사용 중 · mTLS STRICT/AuthorizationPolicy 예정 |
 | 앱 데이터      | NATS JetStream (이벤트 백본), Redis (캐시)                                                                | 완료                                                                                         |
 | 오토스케일      | HPA + Prometheus Adapter                                                                            | 예정                                                                                         |
 | DR / 백업    | Velero, OCI Block Volume Backup, Vault Raft Snapshot                                                | 예정                                                                                         |

@@ -5,7 +5,7 @@ OCI 인프라 프로비저닝. VCN, OKE Basic Cluster, ARM Always Free 노드 �
 ## 1. 전제 조건
 
 - OCI 유료 계정 (Pay As You Go / Universal Credits) — OKE는 Free Tier 계정 미지원
-- Terraform `>= 1.3.0`
+- Terraform `>= 1.12.0` (`oci` 백엔드 요구, §2-2)
 - OCI API Key (`.pem`) + fingerprint + tenancy/user OCID
 - SSH 공개키 (워커 노드 접근용)
 - OCI CLI — kubeconfig 생성 시 사용
@@ -142,6 +142,10 @@ object-storage (독립)
 ### object-storage 모듈
 
 `bucket_names` 리스트로 버킷 일괄 생성. **기본값에 `bao-snapshots`(OpenBao raft snapshot) 1개 포함 — 나머지 소비처(Loki/Velero)는 준비 시점에 추가.** `bucket_names = []` 면 버킷 리소스 0개, namespace 조회(read-only)와 endpoint output 만 확보. `NoPublicAccess` + 버저닝 비활성 (Loki compactor 가 retention 직접 관리). namespace + S3-compat endpoint 를 output 으로 노출 — `https://<namespace>.compat.objectstorage.<region>.oraclecloud.com`. S3 자격(Customer Secret Key)은 **state 오염 회피로 terraform 미포함** — 콘솔에서 수동 발급 후 소비처(k8s Secret/OpenBao)에 주입.
+
+### CI — GitHub Actions fmt/validate
+
+`.github/workflows/terraform-ci.yml` — `terraform/**` 변경이 있는 push(main)/PR 에서 GitHub-hosted runner 가 `terraform fmt -check -recursive` → `terraform init -backend=false` → `terraform validate` 를 실행. `-backend=false` 라 remote state / OCI 자격증명에 접근하지 않음 → GitHub Secrets 불요. 검사 실패 = 워크플로 실패(차단). `terraform plan` 은 실 자격증명이 필요해 CI 범위 제외. terraform 버전은 미핀 — 액션 기본(latest)이 `required_version >= 1.12.0` 을 충족.
 
 ## 5. 주의 사항
 
