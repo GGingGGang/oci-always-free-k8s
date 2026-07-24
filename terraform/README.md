@@ -141,7 +141,7 @@ object-storage (독립)
 
 ### object-storage 모듈
 
-`bucket_names` 리스트로 버킷 일괄 생성. **기본 빈 리스트 — 모듈 배선만 선반영하고 버킷은 소비처(Loki/Velero/Vault-snapshot) 준비 시점에 채움.** `bucket_names = []` 면 버킷 리소스 0개, namespace 조회(read-only)와 endpoint output 만 확보. `NoPublicAccess` + 버저닝 비활성 (Loki compactor 가 retention 직접 관리). namespace + S3-compat endpoint 를 output 으로 노출 — `https://<namespace>.compat.objectstorage.<region>.oraclecloud.com`. S3 자격(Customer Secret Key)은 **state 오염 회피로 terraform 미포함** — 콘솔에서 수동 발급 후 소비처(k8s Secret/OpenBao)에 주입.
+`bucket_names` 리스트로 버킷 일괄 생성. **기본값에 `bao-snapshots`(OpenBao raft snapshot) 1개 포함 — 나머지 소비처(Loki/Velero)는 준비 시점에 추가.** `bucket_names = []` 면 버킷 리소스 0개, namespace 조회(read-only)와 endpoint output 만 확보. `NoPublicAccess` + 버저닝 비활성 (Loki compactor 가 retention 직접 관리). namespace + S3-compat endpoint 를 output 으로 노출 — `https://<namespace>.compat.objectstorage.<region>.oraclecloud.com`. S3 자격(Customer Secret Key)은 **state 오염 회피로 terraform 미포함** — 콘솔에서 수동 발급 후 소비처(k8s Secret/OpenBao)에 주입.
 
 ## 5. 주의 사항
 

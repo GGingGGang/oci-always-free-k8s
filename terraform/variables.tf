@@ -43,6 +43,6 @@ variable "allowed_cidr" {
 
 variable "object_storage_buckets" {
   type        = list(string)
-  description = "Object Storage 버킷 목록 (Loki chunks 등)"
-  default     = []
+  description = "Object Storage 버킷 목록 (OpenBao raft snapshot, Loki chunks 등)"
+  default     = ["bao-snapshots"]
 }

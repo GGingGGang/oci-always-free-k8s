@@ -30,7 +30,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 
 | 계층         | 컴포넌트                                                                                                | 상태                                                                                         |
 | ---------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| IaC        | Terraform                                                                                           | 완료                                                                                         |
+| IaC        | Terraform (remote state — OCI Object Storage `oci` 백엔드)                                            | 완료                                                                                         |
 | 컨테이너       | OKE Basic, Flannel Overlay, containerd                                                              | 완료                                                                                         |
 | 메시 / 게이트웨이 | Gateway API, Istio Ambient, NLB                                                                     | 완료                                                                                         |
 | DNS        | external-dns + Cloudflare                                                                           | 완료                                                                                         |
@@ -151,7 +151,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 ```bash
 cd terraform
 cp terraform.tfvars.example terraform.tfvars   # OCID, region, SSH key 등 채움
-terraform init
+terraform init -backend-config=backend.local.hcl   # remote state (OCI Object Storage)
 terraform apply
 ```
 
