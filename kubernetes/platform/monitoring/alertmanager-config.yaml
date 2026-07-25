@@ -1,0 +1,67 @@
+# Alertmanager 전역 라우팅/수신처 — values.yaml 의 alertmanagerSpec.alertmanagerConfiguration 이 참조 (global 모드).
+# global 모드는 차트 기본 config 를 통째로 대체하므로, kps 기본 inhibit 규칙과 Watchdog→null 라우트도
+# 여기 명시적으로 포함돼 있다 — 중복으로 보여도 삭제 금지.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: alertmanager-global-config
+  namespace: monitoring
+spec:
+  route:
+    receiver: discord
+    groupBy:
+      - namespace
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 12h
+    routes:
+      - receiver: "null"
+        matchers:
+          - name: alertname
+            value: Watchdog
+            matchType: "="
+  receivers:
+    - name: "null"
+    - name: discord
+      discordConfigs:
+        - apiURL:
+            name: discord-webhook
+            key: webhook-url
+          sendResolved: true
+  inhibitRules:
+    - sourceMatch:
+        - name: severity
+          value: critical
+          matchType: "="
+      targetMatch:
+        - name: severity
+          value: "warning|info"
+          matchType: "=~"
+      equal:
+        - namespace
+        - alertname
+    - sourceMatch:
+        - name: severity
+          value: warning
+          matchType: "="
+      targetMatch:
+        - name: severity
+          value: info
+          matchType: "="
+      equal:
+        - namespace
+        - alertname
+    - sourceMatch:
+        - name: alertname
+          value: InfoInhibitor
+          matchType: "="
+      targetMatch:
+        - name: severity
+          value: info
+          matchType: "="
+      equal:
+        - namespace
+    - targetMatch:
+        - name: alertname
+          value: InfoInhibitor
+          matchType: "="

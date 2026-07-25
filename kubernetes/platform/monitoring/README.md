@@ -49,27 +49,26 @@ kubectl -n monitoring get secret grafana-admin-fixed \
 
 ### 알림 수신처 배선 (Discord)
 
-Alertmanager 는 차트 기본 config 로 기동되며 수신처가 `"null"` 뿐 — 배선 전까지 알림이 어디로도 발송되지 않는다. 수신처는 Discord 웹훅 (AM `discord_configs` 는 v0.25 도입 — 공식 문서 2026-07 확인, 현행 v0.28 네이티브라 브리지 어댑터 불요).
+Alertmanager 는 배선 전까지 수신처가 `"null"` 뿐 — 알림이 어디로도 발송되지 않는다. 라우팅/수신처는 **`alertmanager-config.yaml`(AlertmanagerConfig CR, git-가시)** 이 소유하고 `values.yaml` 의 `alertmanagerSpec.alertmanagerConfiguration` 이 참조한다(global 모드). 웹훅 URL 만 사전 수동 Secret 으로 분리 (`grafana-admin-fixed` 와 동일 패턴) — CR 의 `apiURL` 이 secretKeyRef 로 가리키고, operator 가 config 생성 시점에 값을 인라인하므로 파드 마운트 불요.
 
-라우팅 config 는 `values.yaml` 에 git-가시로 두고 **웹훅 URL 만 사전 수동 Secret 으로 분리** — `grafana-admin-fixed` 와 동일 패턴. `discord_configs` 의 `webhook_url_file`(AM v0.26 도입)이 이 분리를 지원하며, 배포 중인 v0.28.1 바이너리로 `amtool check-config` 검증 완료 (2026-07).
+> chart `alertmanager.config` + `webhook_url_file` 방식은 불가 — AM 바이너리(v0.28)는 지원하지만 **prometheus-operator(v0.83) config 파서가 그 필드를 몰라** `-generated` Secret 생성을 거부한다. AlertmanagerConfig 는 operator 자기 CRD 라 이 파서 불일치가 구조적으로 없다. helm CLI 직접 upgrade 도 불가 — kps 는 ArgoCD 가 ServerSideApply 로 소유해 field manager 충돌로 거부된다 (`../argocd/README.md` §6 adopt 구조).
 
-① Discord 채널 → 설정 → 연동 → 웹훅 생성, URL 복사.
+global 모드는 차트 기본 config 를 **통째로 대체**한다 — kps 기본 inhibit 규칙과 Watchdog→null 라우트가 CR 에 명시적으로 들어가 있는 이유. info 알림은 InfoInhibitor 억제로 통지되지 않고 warning 이상만 도착한다.
 
-② Secret 생성 — operator 가 `alertmanagerSpec.secrets` 목록을 `/etc/alertmanager/secrets/<name>/<key>` 로 마운트하고, `values.yaml` 의 `webhook_url_file` 이 그 경로를 가리킨다:
+① Discord 채널 → 설정 → 연동 → 웹훅 생성, URL 복사 — `https://discord.com/api/webhooks/<id>/<token>` 그대로 (접미사 불요).
+
+② Secret 생성:
 
 ```bash
 kubectl -n monitoring create secret generic discord-webhook \
   --from-literal=webhook-url='<DISCORD_WEBHOOK_URL>'
 ```
 
-`alertmanager.config` 는 helm 이 차트 기본값과 **딥머지** — `route.receiver` 만 덮고 inhibit_rules·Watchdog→null 서브라우트·group 설정은 기본값이 살아남는다. 단 `receivers` 는 리스트라 **통째 교체** — `"null"` 을 반드시 포함할 것 (Watchdog 라우트가 참조). info 알림은 기본 inhibit 규칙(InfoInhibitor)이 억제하므로 단일 채널로 warning↑ 만 도착한다.
-
-③ 적용 — kps 는 ArgoCD Application(`../argocd/apps/kps.yaml`, multi-source: 차트 75.0.0 + git main 의 이 폴더 `values.yaml`)이 **ServerSideApply 로 소유** — helm CLI 로 직접 upgrade 하면 `argocd-controller` 와 field manager 충돌로 거부된다. `values.yaml` 을 main 에 push 한 뒤 sync (syncPolicy 에 automated 없음 — push 만으로는 반영되지 않는다):
+③ 적용 — push 후 sync (`monitoring-resources` 앱이 CR 을, `kps` 앱이 values 참조를 배포. syncPolicy 에 automated 없음 — push 만으로는 반영되지 않는다):
 
 ```bash
-git add kubernetes/platform/monitoring/values.yaml
-git commit -m "feat(monitoring): wire Alertmanager discord receiver" && git push
-
+kubectl -n cicd patch application platform-root --type merge -p '{"operation":{"sync":{}}}'
+kubectl -n cicd patch application monitoring-resources --type merge -p '{"operation":{"sync":{}}}'
 kubectl -n cicd patch application kps --type merge -p '{"operation":{"sync":{}}}'
 ```
 

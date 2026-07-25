@@ -33,17 +33,11 @@ alertmanager:
         memory: 32Mi
       limits:
         memory: 64Mi
-    secrets:
-      - discord-webhook
-  config:
-    route:
-      receiver: discord
-    # receivers 는 차트 기본과 병합이 아니라 통째 교체 — "null" 은 Watchdog 라우트가 참조하므로 유지 필수
-    receivers:
-      - name: "null"
-      - name: discord
-        discord_configs:
-          - webhook_url_file: /etc/alertmanager/secrets/discord-webhook/webhook-url
+    # 라우팅/수신처는 AlertmanagerConfig CR(alertmanager-config.yaml) 소유 — 여기에 config: 를 쓰지 말 것
+    alertmanagerConfiguration:
+      name: alertmanager-global-config
+      global:
+        resolveTimeout: 5m
 
 grafana:
   fullnameOverride: grafana

@@ -152,7 +152,7 @@ argocd/
     ├── external-dns.yaml        (helm)
     ├── metrics-server.yaml      (helm)
     ├── istio-base/istiod/istio-cni/ztunnel.yaml  (helm ×4) + istio-gateway.yaml (raw: Gateway/redirect)
-    ├── kps.yaml                 (helm) + monitoring-httproute.yaml (raw)
+    ├── kps.yaml                 (helm) + monitoring-httproute.yaml / monitoring-resources.yaml (raw)
     ├── jenkins.yaml             (helm) + jenkins-rbac.yaml / jenkins-httproute.yaml (raw)
     ├── argocd.yaml              (helm, self-manage) + argocd-httproute.yaml (raw)
     ├── redis.yaml               (raw)

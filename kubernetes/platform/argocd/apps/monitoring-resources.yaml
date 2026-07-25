@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-resources
+  namespace: cicd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/GGingGGang/oci-always-free-k8s.git
+    targetRevision: main
+    path: kubernetes/platform/monitoring
+    directory:
+      recurse: false
+      include: "alertmanager-config.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    syncOptions:
+      - ServerSideApply=true
