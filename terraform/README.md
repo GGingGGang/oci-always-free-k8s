@@ -161,21 +161,6 @@ CIDR 변경 후 `terraform apply` 즉시 NSG가 갱신됨. 이전 IP에서 활�
 
 default `v1.34.2`가 리전에서 미지원일 수 있음. 적용 전 `oci ce cluster-options get --cluster-option-id all`로 가용 버전 확인.
 
-### terraform state
-
-현재 로컬 state. 팀 운영 또는 다중 환경 시 OCI Object Storage backend로 이관 권고:
-
-```hcl
-terraform {
-  backend "s3" {  # OCI Object Storage S3 호환
-    bucket   = "<your-state-bucket>"
-    key      = "oci-always-free-k8s.tfstate"
-    region   = "<your-region>"
-    endpoint = "https://<namespace>.compat.objectstorage.<region>.oraclecloud.com"
-  }
-}
-```
-
 ### db_admin_password rotation
 
 `sensitive = true`로 plan/apply 출력에서 마스킹. tfvars 자체는 `.gitignore` 적용. 회전은 OCI 콘솔에서 직접 변경 후 `terraform refresh` 또는 변수만 갱신해서 in-place update.
