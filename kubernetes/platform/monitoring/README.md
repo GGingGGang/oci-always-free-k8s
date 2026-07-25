@@ -1,6 +1,6 @@
 # Monitoring (kube-prometheus-stack)
 
-메트릭/알림/대시보드. Prometheus + Alertmanager + Grafana + node-exporter + kube-state-metrics + prometheus-operator 일괄.
+메트릭/대시보드 + 알림 기반. Prometheus + Alertmanager + Grafana + node-exporter + kube-state-metrics + prometheus-operator 일괄. Alertmanager 는 차트 기본값으로 기동돼 있으나 **수신처/라우팅 미구성** — 알림이 어디로도 발송되지 않는다. 배선은 후속.
 
 참조:
 - https://github.com/prometheus-community/helm-charts (chart `prometheus-community/kube-prometheus-stack`)
