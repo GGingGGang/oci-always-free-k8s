@@ -38,7 +38,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 | GitOps     | ArgoCD, Jenkins, GHCR                                                                               | 완료                                                                                         |
 | 앱 (MSA)    | core (Go/chi), batch (Java/Spring Batch), auth (Node.js/Fastify) → Kaniko/GHCR → ArgoCD app-of-apps | 진행 중                                                                                       |
 | 시크릿        | OpenBao (Vault), OCI KMS auto-unseal                                                                | 완료                                                                                         |
-| 관측         | kube-prometheus-stack (Prometheus·Grafana·Alertmanager)                                             | 메트릭·대시보드 완료 · 알림 수신처 미구성 · Loki/Alloy/Tempo/Kiali 예정                             |
+| 관측         | kube-prometheus-stack (Prometheus·Grafana·Alertmanager→Discord)                                     | 메트릭·대시보드·알림 완료 · Loki/Alloy/Tempo/Kiali 예정                                          |
 | 보안         | Trivy, cosign, Kyverno, PSA, Istio mTLS/AuthorizationPolicy                                         | Trivy(CI 스캔) · cosign(이미지 서명) · Kyverno(verifyImages, Audit) · PSA 사용 중 · mTLS STRICT/AuthorizationPolicy 예정 |
 | 앱 데이터      | NATS JetStream (이벤트 백본), Redis (캐시)                                                                | 완료                                                                                         |
 | 오토스케일      | HPA + Prometheus Adapter                                                                            | 예정                                                                                         |
