@@ -3,7 +3,7 @@ kind: ClusterPolicy
 metadata:
   name: verify-svc-image-signature
 spec:
-  validationFailureAction: Audit
+  validationFailureAction: Enforce
   background: false
   webhookTimeoutSeconds: 30
   rules:
@@ -19,7 +19,7 @@ spec:
       verifyImages:
         - imageReferences:
             - "ghcr.io/ggingggang/svc-*"
-          failureAction: Audit
+          failureAction: Enforce
           mutateDigest: false
           verifyDigest: false
           imageRegistryCredentials:
