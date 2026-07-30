@@ -16,5 +16,6 @@ spec:
     server: https://kubernetes.default.svc
     namespace: cicd
   syncPolicy:
+    automated: {}
     syncOptions:
       - CreateNamespace=false

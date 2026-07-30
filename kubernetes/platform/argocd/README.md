@@ -144,7 +144,7 @@ argocd login argocd.ggang.cloud --grpc-web
 ```
 argocd/
 ├── project.yaml        AppProject "platform" — sourceRepo/destination/리소스 화이트리스트
-├── root.yaml           Application "platform-root" — apps/ 디렉터리를 가리키는 app-of-apps
+├── root.yaml           Application "platform-root" — apps/ 디렉터리를 가리키는 app-of-apps, automated
 └── apps/               root 가 관리하는 자식 Application 들
     ├── platform-project.yaml    project.yaml(AppProject) 자체를 GitOps 편입 — automated
     ├── namespaces.yaml          (raw)
@@ -158,7 +158,7 @@ argocd/
     ├── redis.yaml               (raw)
     ├── nats.yaml                (helm, chart + $values 2-source)
     ├── kyverno.yaml             (helm) + kyverno-policies.yaml (raw: ClusterPolicy)
-    └── app-layer.yaml           앱 레이어 진입 포인터 → k8s-gitops/argocd
+    └── app-layer.yaml           앱 레이어 진입 포인터 → k8s-gitops/argocd — automated
 ```
 
 ### 인프라 → 앱 레이어 체인
@@ -177,7 +177,8 @@ platform-root (본 레포, 인프라)
 
 - **Application 이름 = 원래 `helm install <name>`**. ArgoCD 가 Application 이름을 helm release 명으로 렌더하므로, 이름이 어긋나면 adopt 가 아니라 리소스 *중복 생성* 이 됨. (`kps`/`istiod`/`istio-cni` 등 전부 원래 release 명 유지)
 - **helm chart + git values = multi-source**. helm repo 를 chart source 로, 본 레포를 `ref: values` 로 두고 `$values/...` 로 values 파일 참조. values 의 단일 진실은 각 컴포넌트 폴더의 `values.yaml` 유지.
-- **adopt 단계 sync policy = 수동 + prune off**. `syncPolicy.automated` 미설정. 돌던 리소스를 추적만 하고 ArgoCD 는 구경꾼. `selfHeal`/`prune`/`automated` 활성은 하드닝 turn 에서.
+- **adopt 단계 sync policy = 수동 + prune off**. 자식 컴포넌트 Application 은 `syncPolicy.automated` 미설정. 돌던 리소스를 추적만 하고 ArgoCD 는 구경꾼. `selfHeal`/`prune`/`automated` 활성은 하드닝 turn 에서.
+- **루트/메타 Application 은 예외로 `automated: {}`**. `platform-root`/`app-layer-root`/`platform-project` 는 Application·AppProject 오브젝트만 배포하므로 sync 에 워크로드 디스럽션이 없다. `apps/` 에 yaml 을 추가하면 수동 sync 없이 자식 Application 이 생성된다. `prune`/`selfHeal` 은 미설정 — yaml 을 지웠을 때 Application 오브젝트 정리는 수동.
 - **`ServerSideApply=true`**. 기존 client-side last-applied annotation 과 충돌 없이 field ownership 흡수.
 
 ### 부트스트랩
@@ -188,8 +189,8 @@ platform-root (본 레포, 인프라)
 kubectl apply -f project.yaml
 kubectl apply -f root.yaml
 
-# root sync → apps/ 자식 Application 생성 (수동)
-argocd app sync platform-root
+# root 는 automated — apply 직후 apps/ 자식 Application 이 자동 생성됨
+argocd app get platform-root
 
 # 자식들이 OutOfSync 로 뜸 — sync-wave 순서로 하나씩 diff 검수 후 sync
 argocd app diff cert-manager     # diff 가 instance 라벨/tracking annotation 추가 수준이면 정상 adopt
