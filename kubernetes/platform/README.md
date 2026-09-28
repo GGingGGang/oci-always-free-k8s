@@ -56,13 +56,10 @@ admin UI(argocd/jenkins/grafana) HTTPRoute는 `public-gateway`의 `https-wildcar
 
 ```
 Jenkins (Kaniko) ──build──► GHCR
-       │
-       └──image tag bump PR──► k8s-gitops ci/bump-<service>
-                                          │
-                                main 병합 ─► ArgoCD ─sync─► 서비스 NS
+       └──image tag bump──► k8s-gitops main ─► ArgoCD ─sync─► 서비스 NS
 ```
 
-Jenkins는 서비스 NS 권한 0건이며 k8s API를 직접 호출하지 않는다. main 빌드는 `ci/bump-<service>` PR 생성·갱신까지 진행하고, PR이 main에 병합된 뒤 ArgoCD가 git diff를 감지해 해당 서비스 NS에 적용한다. 상세 RBAC narrative는 `jenkins/README.md` 참조.
+Jenkins는 서비스 NS 권한 0건이며 k8s API를 직접 호출하지 않는다. Jenkins가 GitOps `main`에 이미지 태그를 직접 push하면 ArgoCD가 git diff를 감지해 해당 서비스 NS에 적용한다. Jenkins 성공은 GitOps push까지이며 실제 배포 완료는 ArgoCD의 Sync와 Health 상태로 확인한다. 상세 RBAC narrative는 `jenkins/README.md` 참조.
 
 ## 6. Secret
 
