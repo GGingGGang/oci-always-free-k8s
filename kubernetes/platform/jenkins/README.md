@@ -130,7 +130,7 @@ Jenkins UI → Manage Jenkins → Clouds → kubernetes → Pod Templates → `k
 
 PV(`oci-bv` 50Gi) 대신 emptyDir. 사유:
 
-- **분배 정합** — Always Free Block Volume 4볼륨 한도 (boot 2 + PV 2). PV 슬롯은 Vault + Prometheus 우선
+- **분배 정합** — 현재 `oci-bv` PVC는 NATS JetStream과 Prometheus가 사용하며, OpenBao는 `emptyDir` 기반 Raft. Jenkins 상태는 Git에서 재생성하므로 PVC가 불필요
 - **GitOps 단일 진실** — 모든 설정이 `values.yaml` JCasC seed에 박힘. UI 클릭으로 영구 변경 ❌ (UI 변경은 next reload에서 git값으로 덮임)
 - **DR narrative** — pod 날아가도 git이 source of truth. PV 복원 불필요
 - **trade-off**: 빌드 history 손실 (재시작마다). 다만 빌드 메타데이터는 git + GHCR + Loki(observability 도입 시)에 영구 보존
@@ -216,7 +216,7 @@ cache + memory 폭주 회피 args (Jenkinsfile 에서 주입):
 
 **`--ignore-path` 필수 — kaniko ↔ durable-task hang**: kaniko 는 최종 이미지 fs 를 컨테이너 `/` 에 풀며 debug 이미지의 shell(`/busybox`)을 덮어쓴다. 그러면 Jenkins durable-task wrapper 가 step 종료코드(`jenkins-result.txt`)를 못 써서 — **이미지는 GHCR push 성공인데 잡은 무한 hang**. `/busybox`(shell)와 `/home/jenkins`(agent workspace) 를 ignore-path 로 보존하면 해소. 증상 식별: 살아있는 `jnlp` 컨테이너로 `find /home/jenkins/agent/workspace -name jenkins-result.txt` → 파일 부재면 이 케이스.
 
-위 `/kaniko/executor` 옵션들은 shared library `kanikoBuild` step 이 내부적으로 조립한다 (`jenkins-shared-library/vars/kanikoBuild.groovy`). 앱 레포 `Jenkinsfile` 은 raw kaniko 호출도, 개별 스테이지 나열도 하지 않고 `ci()` 메타 step 하나로 전체 파이프라인(Test → Build & Push → Image Scan → Sign → Bump)을 조립한다:
+위 `/kaniko/executor` 옵션들은 shared library `kanikoBuild` step 이 내부적으로 조립한다 (`jenkins-shared-library/vars/kanikoBuild.groovy`). 앱 레포 `Jenkinsfile` 은 raw kaniko 호출도, 개별 스테이지 나열도 하지 않고 `ci()` 메타 step 하나로 전체 파이프라인(Test → Build & Push → Image Scan → Sign → Deployment PR)을 조립한다:
 
 ```groovy
 @Library('shared') _
@@ -252,7 +252,7 @@ ci(service: 'core')
 
 - **`welcome-config`** — system message ("Source of truth = git").
 - **`env-config`** — `globalNodeProperties` 로 `GH_ORG` 주입 (`containerEnv` 의 동명 env 를 JCasC `${GH_ORG}` 치환으로 받음). Jenkinsfile/seed 가 GHCR 경로·레포 URL 을 이 변수로 구성 → org 이전 시 한 곳만 변경. (도메인은 변수화 안 함 — `jenkinsUrl` 등에 이미 직접 박혀 공개값)
-- **`credentials-config`** — `github-token` (usernamePassword, scope GLOBAL). 비밀번호는 `${GIT_PAT}` 치환 — `containerEnv` 의 `GIT_PAT` (Secret `jenkins-git-pat` key `token`) 에서 주입. 용도: Jenkins 가 [`k8s-gitops`](https://github.com/GGingGGang/k8s-gitops) 의 `manifests/<svc>` 에 image tag 를 bump (shared library `deployBump`). **credential 실값은 git 에 평문 ❌** — JCasC 는 `${GIT_PAT}` placeholder 만 보유, 실값은 Secret.
+- **`credentials-config`** — `github-token` (usernamePassword, scope GLOBAL). 비밀번호는 `${GIT_PAT}` 치환 — `containerEnv` 의 `GIT_PAT` (Secret `jenkins-git-pat` key `token`) 에서 주입. 용도: Jenkins가 [`k8s-gitops`](https://github.com/GGingGGang/k8s-gitops)의 `manifests/<svc>` image tag 변경 PR을 생성·갱신하는 것(shared library `deployBump`). **credential 실값은 git 에 평문 ❌** — JCasC 는 `${GIT_PAT}` placeholder 만 보유, 실값은 Secret.
 - **`library-config`** — Global Pipeline Library `shared` 등록 (`unclassified.globalLibraries`). `jenkins-shared-library` 레포를 modernSCM git retriever 로 로드, `defaultVersion: main`. **`implicit: false` 라 자동 로드 ❌** — Jenkinsfile 이 `@Library('shared') _` 로 명시 호출해야 적재. 공용 step(예: `kanikoBuild`)을 앱 레포 3곳이 중복 보유하지 않게 하는 단일 출처.
 - **`jobs-config`** — `job-dsl` 로 잡을 선언적 생성. UI 클릭 잡 생성은 emptyDir 라 재기동 시 증발하므로 무효. `organizationFolder('services')` 1개가 레포를 **자동 발견** — 잡을 명세하지 않고 발견 규칙만 명세:
   - `repoOwner('${GH_ORG}')` + `sourceRegexFilter('svc-.*')` — 소유자의 레포 중 `svc-` prefix 만 골라 각각 multibranch 파이프라인 생성. 인벤토리를 git 에 손으로 나열하지 않고 GitHub 스캔으로 재도출 → emptyDir(stateless) 철학과 정합(job 목록조차 상태로 안 들고 boot 마다 derive).
@@ -287,7 +287,7 @@ controller는 빌드 안 함. agent Pod만 빌드 → controller는 *오케스�
 - 빌드 Pod (`kaniko-builder` SA) 는 *GHCR push token* 만 가짐 — Pod 만들 권한 ❌
 - 둘 다 `app` NS 권한 0건 — 배포는 git commit (manifest 패턴) 으로만
 
-manifest commit 패턴: Jenkins 는 *k8s API 직접 호출 ❌*, *git push (`k8s-gitops` `manifests/<svc>` 에 image tag bump — shared library `deployBump`)* 만. ArgoCD 가 git diff 감지해서 `app` NS 에 적용 → *권한 경계가 git 레벨에서 강제됨*.
+manifest 변경 패턴: Jenkins는 *k8s API 직접 호출 ❌*이며, main 빌드 뒤 shared library `deployBump`가 `k8s-gitops`의 `ci/bump-<service>` 브랜치에 image tag 변경을 push하고 PR을 생성·갱신한다. Jenkins 성공은 PR 생성·갱신까지를 뜻하며 배포 완료를 뜻하지 않는다. PR이 main에 병합된 뒤 ArgoCD가 해당 서비스 네임스페이스에 sync한다. 병합 전에는 빌드한 SHA와 PR의 이미지 참조가 같은지 확인하고, 병합 뒤에는 ArgoCD 상태와 공개 서비스의 `curl` 응답을 확인한다.
 
 ### HTTPRoute — admin UI 는 parked, webhook 만 public
 
@@ -317,7 +317,7 @@ manifest commit 패턴: Jenkins 는 *k8s API 직접 호출 ❌*, *git push (`k8s
 - `ghcr-push` (Kaniko 빌드용, `build` NS) — type `kubernetes.io/dockerconfigjson`
 - `ghcr-pull` (`build` NS) — podTemplate `imagePullSecrets` 용. 자체 빌드 cosign 이미지(`ghcr.io/ggingggang/cosign`)가 private GHCR 소속이라 빌드 파드의 이미지 pull 에 필요. 앱 NS 의 동명 Secret 을 복사.
 - `cosign-key` (이미지 서명용, `build` NS) — key `cosign.key`(암호화 개인키) + `password`. cosign 컨테이너가 파일 마운트 + `COSIGN_PASSWORD` env 로 소비. 생성: `cosign generate-key-pair` → `kubectl create secret generic cosign-key -n build --from-file=cosign.key --from-literal=password=<비번>`. 공개키(`cosign.pub`)는 Kyverno 검증용으로 별도 보관.
-- `jenkins-git-pat` (`cicd` NS, key `token`) — `containerEnv` 의 `GIT_PAT` → JCasC `credentials-config` 의 `github-token` 비밀번호. 매니페스트 bump push 용. **미존재 시 controller pod 가 `secretKeyRef` 로 기동 실패.**
+- `jenkins-git-pat` (`cicd` NS, key `token`) — `containerEnv` 의 `GIT_PAT` → JCasC `credentials-config` 의 `github-token` 비밀번호. 매니페스트 bump PR 브랜치 push 용. **미존재 시 controller pod 가 `secretKeyRef` 로 기동 실패.**
 
 앱 레포 등장 시점에 추가 도입:
 

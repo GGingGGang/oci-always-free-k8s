@@ -104,7 +104,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 > OKE Basic의 컨트롤 플레인 자체는 무료. 워커는 Always Free A1.Flex 쿼터 사용.
 > OKE는 Free Tier 계정에서 사용 불가 — PAYG 계정 필수.
 
-전체 카탈로그: [`docs/summary-kr.md`](./summary-kr.md).
+전체 카탈로그: [`docs/summary-kr.md`](./docs/summary-kr.md).
 
 ## 디렉토리
 
@@ -115,7 +115,7 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 │   └── README.md
 ├── kubernetes/                 # K8s 매니페스트
 │   ├── infra/                  # 부트스트랩 인프라
-│   │   ├── namespaces/
+│   │   ├── namespaces/          # 워크로드·플랫폼 네임스페이스와 PSA/ambient/서명검증 라벨
 │   │   ├── gateway-api/
 │   │   ├── istio/
 │   │   ├── external-dns/
@@ -137,9 +137,8 @@ OCI 유료 계정(Pay As You Go / Universal Credits)의 **Always Free 리소스(
 │   └── README.md
 ├── scripts/                    # 반복 실행되는 운영 도구 (예: onboard-app-db.sh)
 └── docs/
-    ├── README-KR.md            # 한국어 미러 (본 문서)
-    ├── summary.md              # Always Free 카탈로그 (EN)
-    └── summary-kr.md           # Always Free 카탈로그 (KR)
+    ├── summary-kr.md           # Always Free 카탈로그 (KR)
+    └── summary.md              # Always Free 카탈로그 (EN)
 ```
 
 앱 레이어 Application CR + 매니페스트는 전용 GitOps 레포(`k8s-gitops`)가, 서비스 씨앗(sed 토큰 치환 → 새 `svc-*` 레포 + `k8s-gitops`)은 `app-templates` 레포가 보유 — 둘 다 본 인프라 레포에는 없음. Quick Start §5 참조.
@@ -155,7 +154,7 @@ terraform init -backend-config=backend.local.hcl   # remote state (OCI Object St
 terraform apply
 ```
 
-상세: [`terraform/README.md`](../terraform/README.md).
+상세: [`terraform/README.md`](./terraform/README.md).
 
 ### 2. kubectl 설정
 
@@ -173,17 +172,17 @@ kubectl get nodes
 
 설치 순서: `namespaces` → `gateway-api` → `istio` (코어) → `external-dns` → `cert-manager` → `istio` (Gateway HTTPS).
 
-상세: [`kubernetes/infra/README.md`](../kubernetes/infra/README.md).
+상세: [`kubernetes/infra/README.md`](./kubernetes/infra/README.md).
 
 ### 4. 플랫폼 배포
 
 infra 계층 위에: ArgoCD(GitOps 컨트롤 플레인) + Jenkins(JCasC + Kaniko 동적 빌드) + OpenBao(시크릿 저장소, OCI KMS auto-unseal) + 관측(kube-prometheus-stack) + 데이터 서비스(Redis 캐시 + NATS JetStream, `data` NS).
 
-상세: [`kubernetes/platform/README.md`](../kubernetes/platform/README.md).
+상세: [`kubernetes/platform/README.md`](./kubernetes/platform/README.md).
 
 ### 5. 애플리케이션 배포
 
-MSA 서비스(`core` — Go/chi 도메인 API, `batch` — Java/Spring Batch consumer, `auth` — Node.js/Fastify 인증 서비스)는 별도 `apps` ArgoCD 프로젝트(app-of-apps)로 배포 — 이 app-of-apps 는 인프라 레포가 아니라 전용 GitOps 레포(`k8s-gitops`)에 있다. 각 서비스 레포(`svc-*`)는 코드 + `Dockerfile` + `Jenkinsfile`만 보유, GitOps 레포가 Application 포인터와 k8s 매니페스트(`manifests/<svc>/`)를 함께 보유. push → Jenkins(webhook → Kaniko → GHCR → shared library `deployBump` 가 `k8s-gitops` 에 태그 커밋) → ArgoCD가 서비스별 NS에 매니페스트 sync → HTTP 노출 서비스는 Istio Gateway가 `api.${domain}/v1/<service>` 로 노출.
+MSA 서비스(`core` — Go/chi 도메인 API, `batch` — Java/Spring Batch consumer, `auth` — Node.js/Fastify 인증 서비스)는 별도 `apps` ArgoCD 프로젝트(app-of-apps)로 배포 — 이 app-of-apps 는 인프라 레포가 아니라 전용 GitOps 레포(`k8s-gitops`)에 있다. 각 서비스 레포(`svc-*`)는 코드 + `Dockerfile` + `Jenkinsfile`만 보유하고, GitOps 레포가 Application 포인터와 k8s 매니페스트(`manifests/<svc>/`)를 함께 보유한다. main 빌드는 Jenkins webhook → Kaniko → GHCR → shared library `deployBump`의 `ci/bump-<service>` PR 생성·갱신까지 진행한다. PR이 main에 병합되면 ArgoCD가 서비스별 네임스페이스에 매니페스트를 sync하며, 이 병합과 sync가 배포 완료 조건이다. HTTP 노출 서비스는 Istio Gateway가 `api.${domain}/v1/<service>`로 노출한다.
 
 ## 네트워크 구성
 
@@ -228,7 +227,7 @@ VCN 내부 통신(워커↔워커, 워커↔DB)은 인스턴스 전체 대역폭
 
 ## 컨벤션
 
-- **Git 박힌 값**: apex 도메인 (`ggang.cloud`) + admin 이메일 (`admin@ggang.cloud`) 하드코딩 — 도메인 변경 시 [`init.sh`](../init.sh) 사용.
+- **Git 박힌 값**: apex 도메인 (`ggang.cloud`) + admin 이메일 (`admin@ggang.cloud`) 하드코딩 — 도메인 변경 시 [`init.sh`](./init.sh) 사용.
 - **Secret 성격 placeholder**: `<your-cf-token>`, `<your-region>`, `<your-github-user>`, `<your-ghcr-write-token>` — Secret 생성 시 직접 주입, git 진입 ❌.
 - **비밀값**: `*.env`, `*.local.*`, `*.tfvars`, `*.pem`, `*.ppk`, `*.pub` 는 gitignore 적용. 사적 값은 git 추적 제외.
 - **README 구조**: 모든 컴포넌트 폴더는 5섹션 — 전제 조건 / 설치 / 검증 / 결정 / 주의 사항.

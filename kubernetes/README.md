@@ -11,7 +11,7 @@ OKE 클러스터 위에서 동작하는 Kubernetes 매니페스트.
 ```
 kubernetes/
 ├── infra/                # 클러스터 부트스트랩 인프라
-│   ├── namespaces/       # 네임스페이스 + PSA 라벨
+│   ├── namespaces/       # 워크로드·플랫폼 네임스페이스와 PSA/ambient/서명검증 라벨
 │   ├── gateway-api/      # Gateway API CRD
 │   ├── istio/            # Ambient mesh + Gateway/HTTPRoute
 │   ├── external-dns/     # HTTPRoute hostnames → Cloudflare DNS

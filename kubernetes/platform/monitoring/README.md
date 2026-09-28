@@ -122,7 +122,7 @@ argocd 패턴 동일. Grafana는 ClusterIP HTTP, `public-gateway`가 `*.ggang.cl
 출처: grafana chart `values.yaml` `admin.existingSecret`/`userKey`/`passwordKey` (grafana-community/helm-charts, 조회 2026-07-10 — grafana/helm-charts 는 2026-01-30 이 repo 로 이관).
 
 ### 스토리지 — Prometheus 영속 PV (oci-bv 50Gi)
-Prometheus 는 장기 메트릭 저장소(Thanos) 없는 단독 보관소 → 재시작마다 history 소실은 비용 과다. Always Free Block Volume 한도(부트 ×2 + PV ×2 = 4볼륨 / 총 200GB)의 PV 2칸 우선순위 = **Vault, Prometheus**. `storageSpec.volumeClaimTemplate` 로 `oci-bv` 50Gi 동적 프로비저닝, retention `15d` / retentionSize `45GiB`(디스크 full 전 prune 가드). Grafana/Alertmanager 는 ephemeral 유지(대시보드=코드, 알림 상태는 짧은 보존이라 손실 허용). Loki(오브젝트 스토리지) / Tempo(emptyDir) 후속과 정합.
+Prometheus는 장기 메트릭 저장소(Thanos) 없는 단독 보관소라 재시작마다 history를 잃지 않도록 `storageSpec.volumeClaimTemplate`로 `oci-bv` 50Gi PVC를 만든다. 현재 다른 `oci-bv` PVC는 NATS JetStream file store가 사용하며, OpenBao는 `emptyDir` 기반 Raft다. retention은 `15d`, retentionSize는 `45GiB`로 디스크 full 전 prune 가드를 둔다. Grafana와 Alertmanager는 ephemeral로 유지한다.
 
 ### 리소스 핀 — Always Free tight
 24GB 분배에서 Vault/기존 컴포넌트와 공존하도록 tight. mem limit만 설정(cpu limit 미설정 — throttling 회피).
@@ -133,7 +133,7 @@ Prometheus 는 장기 메트릭 저장소(Thanos) 없는 단독 보관소 → �
 major를 자주 올림 — upgrade 전 CHANGELOG breaking change 확인. CRD는 chart가 설치하지만 `helm uninstall` 시 잔존. major upgrade 시 CRD 수동 apply가 필요할 수 있음.
 
 ### Prometheus 디스크 / OOM
-`retentionSize 45GiB` < PV `50Gi` — 디스크 full 전에 prune. 시계열 급증으로 디스크 압박 시 retention 단축. mem 압박은 `resources.limits.memory` 상향 — 메모리는 active series·쿼리 기준이라 디스크 retention 과 별개. PVC 는 `volumeClaimTemplate` 이라 STS 재생성 시에도 유지(블록볼륨 한도 = 부트 2 + PV 2 고정).
+`retentionSize 45GiB` < PV `50Gi` — 디스크 full 전에 prune. 시계열 급증으로 디스크 압박 시 retention 단축. mem 압박은 `resources.limits.memory` 상향 — 메모리는 active series·쿼리 기준이라 디스크 retention과 별개. PVC는 `volumeClaimTemplate`이라 StatefulSet 재생성 뒤에도 유지한다.
 
 ### Grafana admin 비밀번호 고정 / 회전
 admin 자격은 `grafana.admin.existingSecret: grafana-admin-fixed` 로 고정 (§2·§4). 비번 변경 시 이 Secret 을 갱신 후 grafana pod 재기동:

@@ -45,7 +45,7 @@ istioctl ztunnel-config workloads -n data | grep redis   # HBONE
 
 ### ephemeral (PV 0)
 
-Block Volume 한도(부트 2 + PV 2)의 PV 2칸은 Vault/Prometheus 가 선점 → 캐시에 줄 PV 없음. 캐시는 source of truth 가 아니라 ephemeral 가 *정상* — 재시작 시 비어도 cache-aside 가 DB 에서 백필. `save ""` + `appendonly no` 로 RDB/AOF 비활성, `/data` 는 emptyDir.
+현재 `oci-bv` PVC는 NATS와 Prometheus에 사용한다. OpenBao는 `emptyDir` 기반 Raft이고 Redis는 source of truth가 아니므로 PVC를 사용하지 않는다. 재시작 뒤 캐시가 비어도 cache-aside가 DB에서 백필한다. `save ""` + `appendonly no`로 RDB/AOF를 비활성화하고 `/data`는 `emptyDir`로 둔다.
 
 ### cache-aside + allkeys-lru
 

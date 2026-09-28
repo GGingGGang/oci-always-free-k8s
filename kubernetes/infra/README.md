@@ -8,7 +8,7 @@ OKE 클러스터의 기반 인프라 계층. 네임스페이스/PSA, Gateway API
 
 | 폴더 | 역할 | helm 릴리즈 | 외부 의존 |
 |------|------|------------|----------|
-| `namespaces/` | 네임스페이스 + PSA(`app`에 enforce=restricted) | — | — |
+| `namespaces/` | 워크로드·플랫폼 네임스페이스와 PSA/ambient/서명검증 라벨 | — | — |
 | `gateway-api/` | Gateway API v1.5.0 standard CRD | — | — |
 | `istio/` | Ambient mesh(`base`/`istiod`/`cni`/`ztunnel`) + Gateway/HTTPRoute | 4 | — |
 | `external-dns/` | HTTPRoute hostnames → Cloudflare DNS sync | 1 | Cloudflare zone + API token |

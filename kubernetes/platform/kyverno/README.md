@@ -47,7 +47,7 @@ kubectl describe policyreport -n auth | grep -B2 -A6 verify-svc-image-signature
 
 - **Enforce** — 서명 없는/검증 실패 이미지는 admission 에서 거부. 전환 전 Audit 리포트로 라벨 붙은 전 NS 의 PASS 를 확인하는 절차를 거침.
 - **스코프는 `namespaceSelector`(라벨 `verify-images: "true"`) + `ghcr.io/ggingggang/svc-*` 와일드카드** — `jenkins-shared-library`의 `ci()`가 `services.yaml` `defaults.sign: true`로 전 서비스 서명을 이미 깔고 시작해서(신규 서비스도 명시적으로 `sign: false`를 안 주면 자동 서명), 정책 스코프도 정적 나열 대신 라벨 멤버십으로 따라가게 함. 신규 서비스 온보딩 시 이 정책 파일은 무수정 — `namespaces.yaml`에 `verify-images: "true"` 라벨만 추가.
-- **`mutateDigest`/`verifyDigest`: false** — Audit 은 관찰 전용이라 mutation 불가 (kyverno 정책 검증 웹훅이 `mutateDigest=false` 강제). 배포 이미지가 태그(git SHA) 참조라 `verifyDigest` 도 함께 off — 켜두면 서명이 정상이어도 "digest 미참조"로 FAIL 이 찍혀 리포트가 오염됨. **Enforce 전환 시 둘 다 기본(true)으로 되돌려** admission 단계 digest 핀까지 확보.
+- **`mutateDigest`/`verifyDigest`: false** — 현재 ClusterPolicy는 이미 `Enforce`이며, 배포 매니페스트가 태그(git SHA) 참조를 사용하므로 digest mutation과 digest 참조 요구를 모두 끈다. 서명 검증은 유지하지만 이미지 참조를 digest로 복원하거나 강제하지 않는다. digest pinning을 도입하려면 정책과 배포 매니페스트를 함께 변경해 검증한다.
 - **기본(Cosign) 검증 타입 — `type: SigstoreBundle` 미사용** — Kyverno 1.18 은 SigstoreBundle 에서 raw 공개키(`keys.publicKeys`)를 **조용히 무시**해 검증 불가 (kyverno#16267·#14233, 수정 PR #16270 진행 중 — tlog 유무 불문 "no matching signatures found" 실측). 서명을 cosign v2 레거시 포맷으로 맞추고 성숙한 기본 경로를 사용. bundle 의 key 지원이 릴리스되면 v3/bundle 복귀 검토.
 - **tlog 미사용 · `rekor.ignoreTlog: true`** — 서명이 `--tlog-upload=false`(자체완결, 공개 Rekor 미의존)라 검증도 tlog 조회를 끔. 이 설정 없으면 Rekor 조회 실패로 검증이 깨짐.
 - **`imageRegistryCredentials.secrets: [ghcr-pull]` (rule 레벨)** — private GHCR 의 서명 bundle 조회는 rule 레벨 자격증명만 유효(실측). 차트 전역 `existingImagePullSecrets`(`--imagePullSecrets` 인자)는 파싱은 되지만 SigstoreBundle fetch 경로에 적용되지 않았음 — values 쪽 설정은 정리 대상.
@@ -60,4 +60,4 @@ kubectl describe policyreport -n auth | grep -B2 -A6 verify-svc-image-signature
 - **신규 NS 온보딩 시 순서**: `verify-images: "true"` 라벨을 붙이기 전에 해당 서비스가 서명된 이미지로 배포되는지 먼저 확인 — Enforce 상태에서 미서명 이미지로 라벨을 붙이면 다음 재시작/재스케줄 때 파드 생성이 바로 거부됨.
 - webhook 은 정책 match 범위(`verify-images: "true"` 라벨 NS 의 Pod)로 자동 스코프됨 — kyverno 다운 시 영향도 그 범위 안. 라벨 붙은 NS 가 늘수록 kyverno 가용성이 클러스터 admission 에 직결됨.
 - 키 로테이션 시 정책 `publicKeys` 도 함께 교체 — 구 키로 서명된 이미지는 새 키로 검증 실패.
-- **`ghcr-pull` 토큰 만료 = 검증 실패.** Audit 에선 FAIL 리포트로 그치지만 **Enforce 전환 후엔 auth NS 파드 admission 거부로 승격.** 토큰 로테이션 시 kyverno NS 사본도 함께 갱신 — 시크릿 중앙화(OpenBao) 이관 시 단일 소스로 일원화 대상.
+- **`ghcr-pull` 토큰 만료 = 검증 실패 및 admission 거부.** 정책이 `Enforce`이므로 토큰 로테이션 시 kyverno NS 사본도 함께 갱신해야 한다. 시크릿 중앙화(OpenBao) 이관 시 단일 소스로 일원화 대상이다.
