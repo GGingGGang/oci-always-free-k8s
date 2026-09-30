@@ -54,7 +54,7 @@ grafana:
       cpu: 25m
       memory: 384Mi
     limits:
-      memory: 256Mi
+      memory: 512Mi
 
 prometheus-node-exporter:
   hostNetwork: false
