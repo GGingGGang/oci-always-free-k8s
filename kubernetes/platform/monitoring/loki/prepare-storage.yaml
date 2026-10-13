@@ -1,0 +1,99 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: loki-storage-check
+  namespace: monitoring
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 180
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      nodeSelector:
+        storage.ggang.cloud/observability: "true"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        supplementalGroups: [2000]
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: prepare
+          image: busybox:1.37.0
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN, FOWNER]
+          command:
+            - sh
+            - -ec
+            - |
+              test -d /shared/prometheus-db
+              test ! -L /shared/prometheus-db
+              test "$(stat -c %g /shared)" = 2000
+              case "$(stat -c %a /shared)" in
+                277[0-7]) ;;
+                *) echo 'Unexpected PVC root permissions; stopping'; exit 1 ;;
+              esac
+              test ! -L /shared/loki
+              if [ ! -e /shared/loki ]; then
+                mkdir /shared/loki
+                chown 10001:2000 /shared/loki
+                chmod 2770 /shared/loki
+              fi
+              test -d /shared/loki
+              test "$(stat -c %u:%g /shared/loki)" = 10001:2000
+              test "$(stat -c %a /shared/loki)" = 2770
+              stat -c '%a %u:%g %n' /shared /shared/prometheus-db /shared/loki
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: shared
+              mountPath: /shared
+      containers:
+        - name: check
+          image: busybox:1.37.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          command:
+            - sh
+            - -ec
+            - |
+              id
+              if [ -e /data/.loki-storage-check ]; then
+                test ! -L /data/.loki-storage-check
+                test "$(cat /data/.loki-storage-check)" = loki-storage-ok
+                echo 'Existing storage marker preserved'
+              else
+                printf '%s\n' loki-storage-ok > /data/.loki-storage-check
+                echo 'Storage marker created'
+              fi
+              test -w /data
+              df -h /data
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: shared
+              mountPath: /data
+              subPath: loki
+      volumes:
+        - name: shared
+          persistentVolumeClaim:
+            claimName: prometheus-kps-kube-prometheus-stack-prometheus-db-prometheus-kps-kube-prometheus-stack-prometheus-0

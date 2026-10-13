@@ -152,7 +152,8 @@ argocd/
     ├── external-dns.yaml        (helm)
     ├── metrics-server.yaml      (helm)
     ├── istio-base/istiod/istio-cni/ztunnel.yaml  (helm ×4) + istio-gateway.yaml (raw: Gateway/redirect)
-    ├── kps.yaml                 (helm) + monitoring-httproute.yaml / monitoring-resources.yaml (raw)
+    ├── kps.yaml                 (monitoring/kps, helm) + monitoring-httproute.yaml / monitoring-resources.yaml (raw)
+    ├── loki.yaml                (monitoring/loki, helm, 기존 monitoring PVC 공유, 수동 sync)
     ├── jenkins.yaml             (helm) + jenkins-rbac.yaml / jenkins-httproute.yaml (raw)
     ├── argocd.yaml              (helm, self-manage) + argocd-httproute.yaml (raw)
     ├── redis.yaml               (raw)
@@ -225,6 +226,7 @@ adopt 정상 판정: diff 가 `app.kubernetes.io/instance` 라벨 + `argocd.argo
 | metrics-server | `3.13.1` |
 | istio base/istiod/cni/ztunnel | `1.29.3` |
 | kps | `75.0.0` |
+| loki | `18.15.1` |
 | jenkins | `5.9.26` |
 | argocd | `7.7.23` |
 | nats | `2.14.2` |

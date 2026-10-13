@@ -13,6 +13,7 @@ spec:
     - https://kubernetes-sigs.github.io/metrics-server/
     - https://istio-release.storage.googleapis.com/charts
     - https://prometheus-community.github.io/helm-charts
+    - https://grafana-community.github.io/helm-charts
     - https://charts.jenkins.io
     - https://argoproj.github.io/argo-helm
     - https://nats-io.github.io/k8s/helm/charts/

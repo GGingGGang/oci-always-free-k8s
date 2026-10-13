@@ -24,7 +24,9 @@ kubernetes/
 │   ├── argocd/           # GitOps 컨트롤 플레인 (helm + HTTPRoute)
 │   ├── jenkins/          # JCasC + emptyDir, 동적 agent (+ Kaniko podTemplate in build NS)
 │   ├── openbao/          # 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal + Injector, ephemeral)
-│   ├── monitoring/       # kube-prometheus-stack (Prometheus/Alertmanager/Grafana)
+│   ├── monitoring/       # 관측 스택
+│   │   ├── kps/          # Prometheus / Alertmanager
+│   │   └── loki/         # 로그 저장소
 │   ├── redis/            # MSA 캐시 (ephemeral, cache-aside, data NS)
 │   ├── nats/             # MSA 이벤트 백본 (JetStream file store, data NS)
 │   └── kyverno/          # 정책 엔진 — 이미지 서명 admission 검증 (kyverno NS)
@@ -48,7 +50,7 @@ helm install + `kubectl apply` 수동(멱등) 흐름이 cold-start / DR 복구 �
 
 > 결정: deploy 전용 레포 분리 — 매니페스트를 `k8s-gitops/manifests/<svc>` 로 이전. Jenkins 는 앱 main 이 아니라 `k8s-gitops` 에 bump(shared library `deployBump`) → 앱 레포 main 무오염, `k8s-gitops` 는 org folder(`svc-.*`) 밖이라 빌드 루프 없음(`[ci skip]` 불필요). `core`/`batch`/`auth` 이전 완료.
 
-관측 설정은 Grafana 비활성화를 준비한 상태다. 기존 배포의 제거는 [monitoring 안내](platform/monitoring/README.md)의 선택적 prune 절차를 따르며, Loki·Tempo는 저장소 설계와 자원 검증 후 도입한다.
+관측 설정은 Grafana를 비활성화하고 [Loki](platform/monitoring/loki/README.md)의 수동 GitOps 설치를 제공한다. Loki는 기존 Prometheus PVC의 별도 subPath를 사용하므로 노드 라벨·경로 준비 후 KPS와 Loki 순서로 동기화한다. 기존 Grafana 정리는 [KPS 안내](platform/monitoring/kps/README.md)의 선택적 prune 절차를 따른다. Tempo는 Loki 검증 후 도입한다.
 
 ## 예정 추가
 

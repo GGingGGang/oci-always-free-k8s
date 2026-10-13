@@ -369,7 +369,7 @@ kubectl describe httproute jenkins-webhook -n cicd | grep -A5 "Conditions\|Paren
 
 ### prometheus integration
 
-현재 `prometheus.enabled: false`. kube-prometheus-stack 은 도입 완료(`../monitoring/`) — 활성화 시 `prometheus.serviceMonitor.enabled: true` + ServiceMonitor 자동 등록. 빌드 큐 길이, agent 생성 시간, 빌드 실패율 메트릭 수집.
+현재 `prometheus.enabled: false`. kube-prometheus-stack 은 도입 완료(`../monitoring/kps/`) — 활성화 시 `prometheus.serviceMonitor.enabled: true` + ServiceMonitor 자동 등록. 빌드 큐 길이, agent 생성 시간, 빌드 실패율 메트릭 수집.
 
 ### Kaniko 빌드 실패 디버깅
 

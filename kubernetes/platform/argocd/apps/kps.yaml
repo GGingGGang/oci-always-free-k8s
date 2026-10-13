@@ -13,7 +13,7 @@ spec:
       targetRevision: 75.0.0
       helm:
         valueFiles:
-          - $values/kubernetes/platform/monitoring/values.yaml
+          - $values/kubernetes/platform/monitoring/kps/values.yaml
     - repoURL: https://github.com/GGingGGang/oci-always-free-k8s.git
       targetRevision: main
       ref: values

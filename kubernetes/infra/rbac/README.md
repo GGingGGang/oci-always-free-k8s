@@ -31,6 +31,7 @@ ArgoCD / Prometheus(kube-prometheus-stack)는 아직 전용 `rbac.yaml`이 없�
 | Jenkins → build | `cicd/jenkins` | `build` NS Pod CRUD (Kaniko 빌드 Pod 관리, cross-NS) | Role + RoleBinding | `platform/jenkins/rbac.yaml` |
 | Kaniko 빌드 | `build/kaniko-builder` | 권한 0건 (`automountServiceAccountToken: false`). Pod 신원 전용 | SA only | `platform/jenkins/rbac.yaml` |
 | Tailscale router | `tailscale/tailscale` | `tailscale` NS Secret create + `tailscale-state` get/update/patch (노드 state 영속) | Role + RoleBinding | `infra/tailscale/rbac.yaml` |
+| Loki | `monitoring/loki` | API 권한 추가 없음, token 자동 마운트 비활성 | SA only (chart) | `platform/monitoring/loki/values.yaml` |
 
 ArgoCD/Prometheus는 위 §개요 참조 — chart 기본 RBAC 사용 중이라 본 표 미등재.
 

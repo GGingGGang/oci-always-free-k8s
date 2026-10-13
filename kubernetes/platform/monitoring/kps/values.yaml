@@ -10,6 +10,11 @@ prometheus:
   prometheusSpec:
     retention: 15d
     retentionSize: 45GiB
+    nodeSelector:
+      storage.ggang.cloud/observability: "true"
+    securityContext:
+      fsGroup: 2000
+      fsGroupChangePolicy: OnRootMismatch
     resources:
       requests:
         cpu: 100m

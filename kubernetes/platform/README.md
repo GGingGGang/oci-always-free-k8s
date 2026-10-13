@@ -11,7 +11,8 @@ infra 부트스트랩(Gateway / TLS / DNS) 위에서 동작하는 플랫폼 계�
 | `argocd/` | GitOps 컨트롤 플레인 | argo/argo-cd `~7.7.0` | `cicd` (PSA baseline) | tailnet (parked — `argocd.ggang.cloud` 주석 처리) |
 | `jenkins/` | JCasC Jenkins + Kaniko 동적 빌드 | jenkins/jenkins `~5.9.0` | `cicd` controller / `build` 빌드 Pod (PSA privileged) | admin: tailnet (parked) / webhook: `ci-hook.ggang.cloud` `/github-webhook/` (active) |
 | `openbao/` | 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal, ephemeral) | openbao/openbao `~0.28.0` | `vault` (PSA baseline) | 없음 (port-forward) |
-| `monitoring/` | 관측 (메트릭/알림/대시보드) | prometheus-community/kube-prometheus-stack `~75.0.0` | `monitoring` (PSA baseline) | tailnet (parked — `grafana.ggang.cloud` 주석 처리) |
+| `monitoring/kps/` | 관측 (메트릭/알림/대시보드) | prometheus-community/kube-prometheus-stack `~75.0.0` | `monitoring` (PSA baseline) | tailnet (parked — `grafana.ggang.cloud` 주석 처리) |
+| `monitoring/loki/` | 로그 저장소, 기존 관측 PVC의 별도 subPath | grafana-community/loki `18.15.1` | `monitoring` (PSA baseline) | 없음 (ClusterIP) |
 | `redis/` | MSA 캐시 (cache-aside, ephemeral) | — (raw manifest, `redis:*-alpine`) | `data` (PSA baseline, ambient) | 없음 (ClusterIP, in-mesh) |
 | `nats/` | MSA 이벤트 백본 (JetStream file store) | nats/nats `2.14.2` | `data` (PSA baseline, ambient) | 없음 (ClusterIP, in-mesh) |
 | `kyverno/` | 정책 엔진 — 이미지 서명 admission 검증 (cosign 공급망 체인) | kyverno/kyverno `3.8.2` + ClusterPolicy | `kyverno` (PSA baseline) | 없음 |
@@ -40,7 +41,7 @@ infra 부트스트랩 완료 후:
 7. kyverno      helm → ClusterPolicy (정책은 kyverno CRD 선행)
 ```
 
-대체로 상호 독립 — argocd/jenkins/monitoring/redis 는 순서 무관. openbao 만 terraform 선행(KMS 키 + Dynamic Group/Policy), kyverno 정책(ClusterPolicy)은 kyverno 차트(CRD) 선행. 각 단계 상세는 해당 폴더 README 참조.
+대체로 상호 독립 — argocd/jenkins/monitoring(kps)/redis 는 순서 무관. openbao 만 terraform 선행(KMS 키 + Dynamic Group/Policy), kyverno 정책(ClusterPolicy)은 kyverno 차트(CRD) 선행. 각 단계 상세는 해당 폴더 README 참조.
 
 ## 4. 외부 노출 / TLS
 
@@ -73,11 +74,11 @@ Jenkins는 서비스 NS 권한 0건이며 k8s API를 직접 호출하지 않는�
 
 placeholder · helm 버전 핀 · 5섹션 README 구조 등 공통 컨벤션은 `../infra/README.md` 참조.
 
-Grafana 비활성화는 `monitoring/values.yaml`에 준비되어 있다. 기존 클러스터의 Grafana 제거는 수동 sync와 대상별 prune으로 수행하며, Prometheus·Alertmanager는 유지한다. 적용·롤백은 [monitoring 안내](monitoring/README.md)를 따른다. Loki·Tempo는 영속 저장소와 자원 검증을 마친 뒤 도입한다.
+Grafana는 `monitoring/kps/values.yaml`에서 비활성화한다. 기존 Grafana 정리는 [KPS 안내](monitoring/kps/README.md)의 대상별 prune 절차를 따른다. [Loki](monitoring/loki/README.md)는 기존 Prometheus PVC를 공유하므로 저장소 노드 라벨·디렉터리 준비 후 KPS, Loki 순서로 수동 동기화한다. Tempo는 Loki의 영속성·메모리 검증 후 도입한다.
 
 ## 7. 다음 후보
 
-- monitoring 후속 — Loki / Alloy / Tempo / Kiali (메트릭·대시보드·알림(Discord)은 완료)
+- monitoring 후속 — Alloy / Tempo / Kiali (Loki는 저장소 준비 후 수동 설치)
 - 데이터 계층 하드닝 — Redis `requirepass` / NATS account 분리 + AuthorizationPolicy 호출자 제한 (현재 in-mesh 무인증)
 - 시크릿 이관 — Cloudflare / DB / GHCR / webhook Secret → OpenBao (Agent Injector / ESO 비교)
 - ArgoCD SSO — `dex.enabled: true` + GitHub OAuth, `admin` 사용자 비활성

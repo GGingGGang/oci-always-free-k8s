@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/GGingGGang/oci-always-free-k8s.git
     targetRevision: main
-    path: kubernetes/platform/monitoring
+    path: kubernetes/platform/monitoring/kps
     directory:
       recurse: false
       include: "alertmanager-config.yaml"
