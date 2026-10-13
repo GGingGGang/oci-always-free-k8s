@@ -48,6 +48,8 @@ helm install + `kubectl apply` 수동(멱등) 흐름이 cold-start / DR 복구 �
 
 > 결정: deploy 전용 레포 분리 — 매니페스트를 `k8s-gitops/manifests/<svc>` 로 이전. Jenkins 는 앱 main 이 아니라 `k8s-gitops` 에 bump(shared library `deployBump`) → 앱 레포 main 무오염, `k8s-gitops` 는 org folder(`svc-.*`) 밖이라 빌드 루프 없음(`[ci skip]` 불필요). `core`/`batch`/`auth` 이전 완료.
 
+관측 설정은 Grafana 비활성화를 준비한 상태다. 기존 배포의 제거는 [monitoring 안내](platform/monitoring/README.md)의 선택적 prune 절차를 따르며, Loki·Tempo는 저장소 설계와 자원 검증 후 도입한다.
+
 ## 예정 추가
 
 - `platform/` — argocd, jenkins, openbao, monitoring, 데이터 계층(redis/nats, `data` NS), kyverno(이미지 서명 admission 검증, Enforce) 도입 완료. 관측 후속(Loki / Alloy / Tempo / Kiali) 예정

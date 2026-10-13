@@ -73,6 +73,8 @@ Jenkins는 서비스 NS 권한 0건이며 k8s API를 직접 호출하지 않는�
 
 placeholder · helm 버전 핀 · 5섹션 README 구조 등 공통 컨벤션은 `../infra/README.md` 참조.
 
+Grafana 비활성화는 `monitoring/values.yaml`에 준비되어 있다. 기존 클러스터의 Grafana 제거는 수동 sync와 대상별 prune으로 수행하며, Prometheus·Alertmanager는 유지한다. 적용·롤백은 [monitoring 안내](monitoring/README.md)를 따른다. Loki·Tempo는 영속 저장소와 자원 검증을 마친 뒤 도입한다.
+
 ## 7. 다음 후보
 
 - monitoring 후속 — Loki / Alloy / Tempo / Kiali (메트릭·대시보드·알림(Discord)은 완료)

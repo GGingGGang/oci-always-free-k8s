@@ -1,6 +1,6 @@
-# HTTPRoute parked — Grafana는 tailnet(ClusterIP) 전용. public 노출 안 함.
+# HTTPRoute parked — Grafana 비활성화 선언과 별도로 기존 리소스 정리가 필요하다.
 # monitoring-httproute Application이 본 파일을 sync하지만 전체 주석이라 렌더 0건(no-op).
-# public 노출 필요 시 아래 주석 해제 + push → ArgoCD 자동 적용 (Application 신설 불요).
+# public 노출 시 Grafana 활성화와 아래 주석 해제 후 수동 sync가 필요하다.
 
 # apiVersion: gateway.networking.k8s.io/v1
 # kind: HTTPRoute

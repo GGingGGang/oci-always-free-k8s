@@ -40,6 +40,8 @@ alertmanager:
         resolveTimeout: 5m
 
 grafana:
+  # rollback 시 아래 기존 설정을 재사용한다.
+  enabled: false
   fullnameOverride: grafana
   admin:
     existingSecret: grafana-admin-fixed
