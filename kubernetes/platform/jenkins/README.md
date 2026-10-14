@@ -42,9 +42,11 @@ kubectl -n build exec "$BUILD_POD" -c trivy -- du -sh /var/cache/trivy
 
 캐시는 `<root>/<SHA256(JOB_NAME)>`으로 나눈다. 다른 작업의 병렬 스캔은 별도 디렉터리를 사용하며, 같은 작업은 `ci()`의 `disableConcurrentBuilds()`로 직렬화한다. step을 직접 호출하는 파이프라인도 같은 작업의 동시 실행을 막아야 한다.
 
+Trivy는 root 소유 hostPath 캐시를 쓰기 위해 UID 0으로 실행하며, 다른 UID의 Jenkins 에이전트가 만든 실행·로그 파일에 접근하도록 `drop: ["ALL"]`에 `add: ["DAC_OVERRIDE"]`만 추가한다. 이 capability는 마운트된 파일의 일반 소유권·접근 권한 검사를 우회할 수 있으므로 Trivy 컨테이너에만 부여한다. `drop: ["ALL"]`만 남기면 `Image Scan`의 `sh`가 로그 없이 대기할 수 있다. [Jenkins의 컨테이너 간 UID 문제 안내](https://plugins.jenkins.io/kubernetes/#plugin-content-pipeline-sh-step-hangs-when-multiple-containers-are-used).
+
 노드 캐시는 잃어도 다시 다운로드하면 되므로 특정 노드로 빌드를 고정하지 않는다. hostPath에는 용량 제한이나 자동 정리가 없으며 사용량이 Pod ephemeral-storage 제한으로 관리되지 않는다. 노드 디스크 여유를 확인하고 오래된 작업 캐시는 빌드가 없는 유지보수 시간에 정리한다. 기존 `/var/lib/trivy-cache`가 다른 용도나 심볼릭 링크로 사용되는 노드는 사전에 경로를 정리해야 한다.
 
-롤백은 values의 `TRIVY_CACHE_ROOT`, 캐시 volumeMount와 hostPath volume을 함께 제거해 Jenkins를 동기화한다. 새 Pod는 임시 캐시로 돌아가며 노드에 남은 캐시는 자동 삭제되지 않는다.
+캐시 도입 전으로 롤백하려면 values의 `TRIVY_CACHE_ROOT`, 캐시 volumeMount와 hostPath volume, Trivy에 추가한 `securityContext`를 함께 제거해 Jenkins를 동기화한다. `drop: ["ALL"]`만 남기지 않는다. 새 Pod는 임시 캐시로 돌아가며 노드에 남은 캐시는 자동 삭제되지 않는다.
 
 근거(2026-10-14 확인): [Kubernetes hostPath](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath), [Trivy 캐시](https://trivy.dev/docs/latest/configuration/cache/).
 
