@@ -13,6 +13,7 @@ infra 부트스트랩(Gateway / TLS / DNS) 위에서 동작하는 플랫폼 계�
 | `openbao/` | 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal, ephemeral) | openbao/openbao `~0.28.0` | `vault` (PSA baseline) | 없음 (port-forward) |
 | `monitoring/kps/` | 관측 (메트릭/알림/대시보드) | prometheus-community/kube-prometheus-stack `~75.0.0` | `monitoring` (PSA baseline) | tailnet (parked — `grafana.ggang.cloud` 주석 처리) |
 | `monitoring/loki/` | 로그 저장소, 기존 관측 PVC의 별도 subPath | grafana-community/loki `18.15.1` | `monitoring` (PSA baseline) | 없음 (ClusterIP) |
+| `monitoring/alloy/` | 앱 namespace 6개의 API 로그 수집 → Loki, 단일 Deployment | grafana/alloy `1.13.1` | `monitoring` (PSA baseline) | 없음 (ClusterIP) |
 | `redis/` | MSA 캐시 (cache-aside, ephemeral) | — (raw manifest, `redis:*-alpine`) | `data` (PSA baseline, ambient) | 없음 (ClusterIP, in-mesh) |
 | `nats/` | MSA 이벤트 백본 (JetStream file store) | nats/nats `2.14.2` | `data` (PSA baseline, ambient) | 없음 (ClusterIP, in-mesh) |
 | `kyverno/` | 정책 엔진 — 이미지 서명 admission 검증 (cosign 공급망 체인) | kyverno/kyverno `3.8.2` + ClusterPolicy | `kyverno` (PSA baseline) | 없음 |

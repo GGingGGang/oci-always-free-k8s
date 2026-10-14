@@ -1,0 +1,112 @@
+fullnameOverride: alloy
+
+crds:
+  create: false
+
+controller:
+  type: deployment
+  replicas: 1
+  # 동시에 두 수집기가 같은 로그를 읽지 않도록 교체한다.
+  updateStrategy:
+    type: Recreate
+
+global:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 473
+    runAsGroup: 473
+    fsGroup: 473
+    seccompProfile:
+      type: RuntimeDefault
+
+rbac:
+  create: true
+  namespaces: [app, web, auth, core, batch, notify]
+  rules:
+    - apiGroups: [""]
+      resources: [pods]
+      verbs: [get, list, watch]
+    - apiGroups: [""]
+      resources: [pods/log]
+      verbs: [get]
+  clusterRules: []
+
+serviceAccount:
+  name: alloy
+  automountServiceAccountToken: true
+
+alloy:
+  enableReporting: false
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: [ALL]
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+  configMap:
+    content: |
+      logging {
+        level = "info"
+      }
+
+      discovery.kubernetes "apps" {
+        role = "pod"
+        namespaces {
+          names = {{ .Values.rbac.namespaces | toJson }}
+        }
+      }
+
+      discovery.relabel "apps" {
+        targets = discovery.kubernetes.apps.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "service_name"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          regex         = "(.+)"
+          target_label  = "service_name"
+        }
+      }
+
+      loki.source.kubernetes "apps" {
+        targets    = discovery.relabel.apps.output
+        forward_to = [loki.write.local.receiver]
+      }
+
+      loki.write "local" {
+        external_labels = {cluster = "oci-always-free-k8s"}
+        endpoint {
+          url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }
+
+# 설정 변경은 Deployment의 ConfigMap checksum으로 반영한다.
+configReloader:
+  enabled: false
+
+service:
+  type: ClusterIP
+
+serviceMonitor:
+  enabled: false
+
+ingress:
+  enabled: false

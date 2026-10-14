@@ -29,7 +29,7 @@ OCI의 Always Free 혜택을 활용하도록 설계한 Kubernetes 플랫폼. Ter
 | 보안 | 네임스페이스별 PSA, Istio ambient enrollment, Kyverno 서명 검증 `Enforce` | [네임스페이스](./kubernetes/infra/namespaces/namespaces.yaml), [이미지 정책](./kubernetes/platform/kyverno/policies/verify-image-signature.yaml) |
 | 시크릿 | OpenBao Raft 1 replica, OCI KMS auto-unseal 설정, `emptyDir` 데이터 경로 | [OpenBao 설정](./kubernetes/platform/openbao/values.yaml) |
 | 데이터 | HeatWave `MySQL.Free` 50 GB, Redis, NATS JetStream | [DB 모듈](./terraform/modules/database/main.tf), [Redis](./kubernetes/platform/redis/README.md), [NATS](./kubernetes/platform/nats/README.md) |
-| 관측 | Prometheus, Alertmanager의 Discord 수신자, Grafana 비활성화, Loki 수동 GitOps 설치 설정 | [monitoring](./kubernetes/platform/monitoring/kps/values.yaml), [알림 설정](./kubernetes/platform/monitoring/kps/alertmanager-config.yaml), [Loki](./kubernetes/platform/monitoring/loki/README.md) |
+| 관측 | Prometheus, Alertmanager의 Discord 수신자, Grafana 비활성화, Loki·Alloy 수동 GitOps 설치 설정 | [monitoring](./kubernetes/platform/monitoring/README.md), [알림 설정](./kubernetes/platform/monitoring/kps/alertmanager-config.yaml), [Loki](./kubernetes/platform/monitoring/loki/README.md), [Alloy](./kubernetes/platform/monitoring/alloy/README.md) |
 | 관리 접근 | Tailscale subnet router, 관리 UI의 public HTTPRoute 비활성화 | [Tailscale](./kubernetes/infra/tailscale/README.md) |
 
 Istio ambient enrollment와 전역 `STRICT` 강제 정책은 구별한다. 현재 이 저장소에는 `PeerAuthentication`의 `STRICT` 정책이나 `AuthorizationPolicy` 매니페스트가 없다. Kyverno의 `mutateDigest`와 `verifyDigest`는 모두 `false`로, 서명 검증과 이미지 digest 고정도 구별한다.

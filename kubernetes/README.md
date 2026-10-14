@@ -26,7 +26,8 @@ kubernetes/
 │   ├── openbao/          # 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal + Injector, ephemeral)
 │   ├── monitoring/       # 관측 스택
 │   │   ├── kps/          # Prometheus / Alertmanager
-│   │   └── loki/         # 로그 저장소
+│   │   ├── loki/         # 로그 저장소
+│   │   └── alloy/        # 앱 namespace 6개의 API 로그 수집 → Loki
 │   ├── redis/            # MSA 캐시 (ephemeral, cache-aside, data NS)
 │   ├── nats/             # MSA 이벤트 백본 (JetStream file store, data NS)
 │   └── kyverno/          # 정책 엔진 — 이미지 서명 admission 검증 (kyverno NS)
@@ -54,5 +55,5 @@ helm install + `kubectl apply` 수동(멱등) 흐름이 cold-start / DR 복구 �
 
 ## 예정 추가
 
-- `platform/` — argocd, jenkins, openbao, monitoring, 데이터 계층(redis/nats, `data` NS), kyverno(이미지 서명 admission 검증, Enforce) 도입 완료. 관측 후속(Loki / Alloy / Tempo / Kiali) 예정
+- `platform/` — argocd, jenkins, openbao, monitoring, 데이터 계층(redis/nats, `data` NS), kyverno(이미지 서명 admission 검증, Enforce) 도입 완료. Loki / [Alloy](platform/monitoring/alloy/README.md) 수동 GitOps 설정 제공, 관측 후속(Tempo / Kiali) 예정
 - 앱 레이어(app-of-apps)는 전용 GitOps 레포(`k8s-gitops`)로 분리 — `core`/`batch`/`auth` Application + 매니페스트 이전 완료. 후속 east-west 통제(Istio mTLS STRICT + AuthorizationPolicy)
