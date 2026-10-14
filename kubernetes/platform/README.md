@@ -4,6 +4,8 @@ infra 부트스트랩(Gateway / TLS / DNS) 위에서 동작하는 플랫폼 계�
 
 각 폴더는 독립 컴포넌트 단위. helm 릴리즈 단위로 의존이 닫혀있어 개별 turn으로 진행 가능.
 
+Jenkins의 Trivy는 [노드별 hostPath 캐시](jenkins/README.md)를 사용한다. 공유 라이브러리 반영 후 Jenkins를 동기화하면 새 빌드가 배치된 노드에서 캐시를 재사용한다. 별도 PV/PVC와 노드 고정은 없다.
+
 ## 1. 구성
 
 | 폴더 | 역할 | helm 릴리즈 | NS | 외부 노출 |

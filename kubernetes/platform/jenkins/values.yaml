@@ -261,6 +261,13 @@ agent:
                 env:
                   - name: DOCKER_CONFIG
                     value: /trivy/.docker
+                  - name: TRIVY_CACHE_ROOT
+                    value: /var/cache/trivy
+                securityContext:
+                  runAsUser: 0
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop: ["ALL"]
                 resources:
                   requests:
                     cpu: 100m
@@ -270,6 +277,8 @@ agent:
                 volumeMounts:
                   - name: docker-config
                     mountPath: /trivy/.docker
+                  - name: trivy-cache
+                    mountPath: /var/cache/trivy
               - name: cosign
                 image: ghcr.io/ggingggang/cosign:2.4.1
                 command: ["sleep"]
@@ -297,6 +306,10 @@ agent:
                     mountPath: /cosign/key
                     readOnly: true
             volumes:
+              - name: trivy-cache
+                hostPath:
+                  path: /var/lib/trivy-cache
+                  type: DirectoryOrCreate
               - name: docker-config
                 projected:
                   sources:

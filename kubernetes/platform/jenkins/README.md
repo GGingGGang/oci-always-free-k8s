@@ -20,6 +20,36 @@
 
 ## 2. 설치
 
+### Trivy 노드별 캐시
+
+Trivy만 노드의 `/var/lib/trivy-cache`를 컨테이너의 `/var/cache/trivy`로 마운트한다. `hostPath: DirectoryOrCreate`로 경로가 없으면 kubelet이 생성한다. PV/PVC, StorageClass, 노드 라벨, subPath는 필요 없다. 기존 `build` namespace의 PSA privileged 정책에서 사용한다.
+
+적용 순서:
+
+1. `jenkins-shared-library`의 `TRIVY_CACHE_ROOT` 지원 변경을 먼저 커밋·푸시한다. 변수가 없는 기존 빌드는 기존 임시 캐시를 사용한다.
+2. 이 저장소의 Jenkins values 변경을 커밋·푸시한다. 실행 중 빌드가 끝난 뒤 Argo CD의 `jenkins` 앱을 수동 Sync한다.
+3. 새 빌드부터 배치된 노드의 캐시를 사용한다. 같은 노드에서 같은 작업을 재실행해 DB 다운로드와 Image Scan 시간을 비교한다.
+
+```bash
+argocd app diff jenkins
+argocd app sync jenkins
+kubectl -n build get pods -o wide
+# 실행 중인 빌드 Pod 이름을 지정한다.
+kubectl -n build exec "$BUILD_POD" -c trivy -- du -sh /var/cache/trivy
+```
+
+노드 A/B는 각각 독립된 캐시를 가진다. 각 노드·Jenkins 작업의 최초 실행에는 DB를 다운로드하며 이후 재사용한다. DB 갱신 시 재다운로드는 정상이다. 업데이트를 끄지 않는다.
+
+캐시는 `<root>/<SHA256(JOB_NAME)>`으로 나눈다. 다른 작업의 병렬 스캔은 별도 디렉터리를 사용하며, 같은 작업은 `ci()`의 `disableConcurrentBuilds()`로 직렬화한다. step을 직접 호출하는 파이프라인도 같은 작업의 동시 실행을 막아야 한다.
+
+노드 캐시는 잃어도 다시 다운로드하면 되므로 특정 노드로 빌드를 고정하지 않는다. hostPath에는 용량 제한이나 자동 정리가 없으며 사용량이 Pod ephemeral-storage 제한으로 관리되지 않는다. 노드 디스크 여유를 확인하고 오래된 작업 캐시는 빌드가 없는 유지보수 시간에 정리한다. 기존 `/var/lib/trivy-cache`가 다른 용도나 심볼릭 링크로 사용되는 노드는 사전에 경로를 정리해야 한다.
+
+롤백은 values의 `TRIVY_CACHE_ROOT`, 캐시 volumeMount와 hostPath volume을 함께 제거해 Jenkins를 동기화한다. 새 Pod는 임시 캐시로 돌아가며 노드에 남은 캐시는 자동 삭제되지 않는다.
+
+근거(2026-10-14 확인): [Kubernetes hostPath](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath), [Trivy 캐시](https://trivy.dev/docs/latest/configuration/cache/).
+
+### Jenkins 설치
+
 ```bash
 export GHCR_USER=<your-github-user>
 export GHCR_TOKEN=<your-ghcr-write-token>
