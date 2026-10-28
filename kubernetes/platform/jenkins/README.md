@@ -50,6 +50,20 @@ Trivy는 root 소유 hostPath 캐시를 쓰기 위해 UID 0으로 실행하며, 
 
 근거(2026-10-14 확인): [Kubernetes hostPath](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath), [Trivy 캐시](https://trivy.dev/docs/latest/configuration/cache/).
 
+#### 캐시 재사용 실측 — 2026-10-14
+
+`services/svc-auth/main`의 연속 빌드에서 확인했다. Trivy `0.72.0`, 이미지 태그 `940e6cc78a01fed5c21852df081d6a61a7a47095`, 복구 커밋 `1d5f29d` 적용 상태다. 스캔 정책과 DB 자동 업데이트는 유지했다.
+
+| 빌드 | 실행 노드 | DB 다운로드 | Image Scan | 전체 빌드 | 결과 |
+| --- | --- | --- | ---: | ---: | --- |
+| #31 | A | 있음 — 첫 캐시 생성 | 98.281초 | 248.412초 | SUCCESS |
+| #32 | B | 있음 — 다른 노드의 첫 캐시 생성 | 80.915초 | 215.082초 | SUCCESS |
+| #33 | A | 없음 — 기존 캐시 재사용 | 27.338초 | 178.719초 | SUCCESS |
+
+같은 노드의 #31 → #33에서 Image Scan은 **70.943초(72.2%)**, 전체 빌드는 **69.693초(28.1%)** 단축됐다. #33 로그에 작업별 `TRIVY_CACHE_DIR` 설정과 스캔 완료가 있고 DB 다운로드는 없었다. 캐시 재사용은 확인됐으며, 수치는 이번 실행 쌍의 관측값이다. DB 갱신이나 캐시 삭제 후에는 다운로드가 다시 발생할 수 있다.
+
+근거: 2026-10-14 14:35 KST에 수집한 Jenkins #31~#33 빌드 로그와 `wfapi/describe` 응답, 각 빌드 Pod의 Kubernetes `Scheduled` 이벤트. 시간은 스캔 명령만이 아니라 리포트 생성·게시를 포함한 `Image Scan` 단계 전체를 기준으로 했다.
+
 ### Jenkins 설치
 
 ```bash
