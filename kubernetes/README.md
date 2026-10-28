@@ -51,9 +51,9 @@ helm install + `kubectl apply` 수동(멱등) 흐름이 cold-start / DR 복구 �
 
 > 결정: deploy 전용 레포 분리 — 매니페스트를 `k8s-gitops/manifests/<svc>` 로 이전. Jenkins 는 앱 main 이 아니라 `k8s-gitops` 에 bump(shared library `deployBump`) → 앱 레포 main 무오염, `k8s-gitops` 는 org folder(`svc-.*`) 밖이라 빌드 루프 없음(`[ci skip]` 불필요). `core`/`batch`/`auth` 이전 완료.
 
-관측 설정은 Grafana를 비활성화하고 [Loki](platform/monitoring/loki/README.md)의 수동 GitOps 설치를 제공한다. Loki는 기존 Prometheus PVC의 별도 subPath를 사용하므로 노드 라벨·경로 준비 후 KPS와 Loki 순서로 동기화한다. 기존 Grafana 정리는 [KPS 안내](platform/monitoring/kps/README.md)의 선택적 prune 절차를 따른다. Tempo는 Loki 검증 후 도입한다.
+관측 설정은 Grafana를 비활성화하고 [Loki](platform/monitoring/loki/README.md)의 수동 GitOps 설치를 제공한다. Loki는 기존 Prometheus PVC의 별도 subPath를 사용하므로 노드 라벨·경로 준비 후 KPS와 Loki 순서로 동기화한다. 기존 Grafana 정리는 [KPS 안내](platform/monitoring/kps/README.md)의 선택적 prune 절차를 따른다. [Tempo](platform/monitoring/tempo/README.md)는 기존 PVC의 `tempo/` 경로와 Alloy OTLP 수신을 구성하며 수동 동기화한다.
 
 ## 예정 추가
 
-- `platform/` — argocd, jenkins, openbao, monitoring, 데이터 계층(redis/nats, `data` NS), kyverno(이미지 서명 admission 검증, Enforce) 도입 완료. Loki / [Alloy](platform/monitoring/alloy/README.md) 수동 GitOps 설정 제공, 관측 후속(Tempo / Kiali) 예정
+- `platform/` — argocd, jenkins, openbao, monitoring, 데이터 계층(redis/nats, `data` NS), kyverno(이미지 서명 admission 검증, Enforce) 도입 완료. Loki / [Alloy](platform/monitoring/alloy/README.md) / [Tempo](platform/monitoring/tempo/README.md) 수동 GitOps 설정 제공, 앱 계측 / Grafana 조회 연결 / Kiali 후속
 - 앱 레이어(app-of-apps)는 전용 GitOps 레포(`k8s-gitops`)로 분리 — `core`/`batch`/`auth` Application + 매니페스트 이전 완료. 후속 east-west 통제(Istio mTLS STRICT + AuthorizationPolicy)

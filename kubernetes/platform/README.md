@@ -6,6 +6,7 @@ infra 부트스트랩(Gateway / TLS / DNS) 위에서 동작하는 플랫폼 계�
 
 Jenkins의 Trivy는 [노드별 hostPath 캐시](jenkins/README.md)를 사용한다. 공유 라이브러리 반영 후 Jenkins를 동기화하면 새 빌드가 배치된 노드에서 캐시를 재사용한다. 별도 PV/PVC와 노드 고정은 없다.
 Trivy에는 Jenkins 공유 작업 경로의 실행·로그 파일에 접근하는 `DAC_OVERRIDE`만 추가하고 나머지 capability는 제거한다.
+2026-10-14 `svc-auth`의 동일 노드 후속 빌드에서 Image Scan은 98.281초에서 27.338초로 단축됐다. [실측 조건과 빌드별 결과](jenkins/README.md#캐시-재사용-실측--2026-10-14)를 기록했다.
 
 ## 1. 구성
 
@@ -78,11 +79,11 @@ Jenkins는 서비스 NS 권한 0건이며 k8s API를 직접 호출하지 않는�
 
 placeholder · helm 버전 핀 · 5섹션 README 구조 등 공통 컨벤션은 `../infra/README.md` 참조.
 
-Grafana는 `monitoring/kps/values.yaml`에서 비활성화한다. 기존 Grafana 정리는 [KPS 안내](monitoring/kps/README.md)의 대상별 prune 절차를 따른다. [Loki](monitoring/loki/README.md)는 기존 Prometheus PVC를 공유하므로 저장소 노드 라벨·디렉터리 준비 후 KPS, Loki 순서로 수동 동기화한다. Tempo는 Loki의 영속성·메모리 검증 후 도입한다.
+Grafana는 `monitoring/kps/values.yaml`에서 비활성화한다. 기존 Grafana 정리는 [KPS 안내](monitoring/kps/README.md)의 대상별 prune 절차를 따른다. [Loki](monitoring/loki/README.md)는 기존 Prometheus PVC를 공유하므로 저장소 노드 라벨·디렉터리 준비 후 KPS, Loki 순서로 수동 동기화한다. [Tempo](monitoring/tempo/README.md)는 기존 PVC의 `tempo/` 경로 준비 후 수동 동기화한다. 이후 Alloy를 동기화하면 OTLP 트레이스를 Tempo로 전달한다. 앱 계측과 Grafana 연결은 별도 설정이다.
 
 ## 7. 다음 후보
 
-- monitoring 후속 — Alloy / Tempo / Kiali (Loki는 저장소 준비 후 수동 설치)
+- monitoring 후속 — 앱 트레이스 계측 / Grafana 조회 연결 / Kiali (Loki·Alloy·Tempo 수동 설치 설정 제공)
 - 데이터 계층 하드닝 — Redis `requirepass` / NATS account 분리 + AuthorizationPolicy 호출자 제한 (현재 in-mesh 무인증)
 - 시크릿 이관 — Cloudflare / DB / GHCR / webhook Secret → OpenBao (Agent Injector / ESO 비교)
 - ArgoCD SSO — `dex.enabled: true` + GitHub OAuth, `admin` 사용자 비활성

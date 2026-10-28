@@ -228,6 +228,7 @@ adopt 정상 판정: diff 가 `app.kubernetes.io/instance` 라벨 + `argocd.argo
 | kps | `75.0.0` |
 | loki | `18.15.1` |
 | alloy | `1.13.1` (신규 설치, 미배포) |
+| tempo | `3.2.1` (신규 설치 설정, 수동 Sync) |
 | jenkins | `5.9.26` |
 | argocd | `7.7.23` |
 | nats | `2.14.2` |

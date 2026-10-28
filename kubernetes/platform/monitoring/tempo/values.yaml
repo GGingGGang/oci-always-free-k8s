@@ -1,0 +1,78 @@
+fullnameOverride: tempo
+replicas: 1
+
+tempo:
+  tag: "3.1.1"
+  reportingEnabled: false
+  multitenancyEnabled: false
+  retention: 24h
+  metricsGenerator:
+    enabled: false
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 2Gi
+  extraEnv:
+    - name: GOMEMLIMIT
+      value: 1536MiB
+  querier:
+    max_concurrent_queries: 2
+  queryFrontend:
+    search:
+      concurrent_jobs: 4
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+      wal:
+        path: /var/tempo/wal
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: [ALL]
+  extraVolumeMounts:
+    - name: tempo-persistent
+      mountPath: /var/tempo
+      subPath: tempo
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 2000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+serviceAccount:
+  automountServiceAccountToken: false
+
+service:
+  type: ClusterIP
+
+persistence:
+  enabled: false
+
+extraVolumes:
+  - name: tempo-persistent
+    persistentVolumeClaim:
+      claimName: prometheus-kps-kube-prometheus-stack-prometheus-db-prometheus-kps-kube-prometheus-stack-prometheus-0
+
+nodeSelector:
+  storage.ggang.cloud/observability: "true"
+
+tempoQuery:
+  enabled: false
+
+serviceMonitor:
+  enabled: false

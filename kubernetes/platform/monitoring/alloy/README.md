@@ -10,12 +10,13 @@
 
 ## 설치
 
-Git 변경을 반영한 뒤 `platform-project`의 chart 저장소 허용과 `platform-root`의 `alloy` Application 등록을 확인한다. Loki가 Ready인 상태에서 `alloy`를 수동 동기화한다. 부모 앱의 wave는 자식 Loki의 Ready를 보장하지 않는다.
+Git 변경을 반영한 뒤 `platform-project`의 chart 저장소 허용과 `platform-root`의 `alloy` Application 등록을 확인한다. Loki와 [Tempo](../tempo/README.md)가 Ready인 상태에서 `alloy`를 수동 동기화한다. 부모 앱의 wave는 자식 워크로드의 Ready를 보장하지 않는다.
 
 ```bash
 argocd app sync platform-project
 argocd app sync platform-root
 kubectl -n monitoring rollout status statefulset/loki --timeout=180s
+kubectl -n monitoring rollout status statefulset/tempo --timeout=300s
 argocd app diff alloy
 argocd app sync alloy
 kubectl -n monitoring rollout status deployment/alloy --timeout=180s
@@ -61,12 +62,14 @@ curl -fsSG http://127.0.0.1:3100/loki/api/v1/query_range \
 
 - API 기반 수집: hostPath·root·privileged 없이 현재 namespace 보안 정책을 유지한다. node 로그·이벤트·앱 내부 파일은 수집하지 않는다.
 - namespace별 Pod `get/list/watch`, `pods/log`의 `get`만 허용한다. Secret·Node·클러스터 전체 조회 권한은 없다.
-- Alloy CPU 요청 100m, 메모리 요청 128Mi / 제한 256Mi. CPU 제한은 두지 않는다. 메모리 제한은 과부하 시 로그 전달을 보장하지 않는다.
+- Alloy CPU 요청 100m, 메모리 요청 256Mi / 제한 512Mi. CPU 제한은 두지 않는다. 메모리 제한은 과부하 시 로그 전달을 보장하지 않는다.
 - namespace, pod, container, service_name, cluster 라벨로 검색한다. service_name은 `app.kubernetes.io/name`, 없으면 컨테이너 이름이다. 로그 본문에서 request ID·사용자 ID 등을 라벨로 만들지 않는다.
 - 로그 레벨 필터 없이 앱이 현재 출력하는 로그를 전송한다. 앱의 DEBUG 활성화나 메트릭 수집은 추가하지 않는다.
 - Recreate로 교체 중 중복 수집을 줄인다. config reloader는 끄고 차트의 ConfigMap checksum으로 설정 변경 시 Pod를 교체한다.
 
 ## 주의 사항
+
+OTLP 트레이스는 4317(gRPC) / 4318(HTTP)에서 수신하여 memory limiter(384MiB, spike 96MiB) → batch(최대 512 spans) → Tempo로 보낸다. 큐는 128 batches, consumer 2개로 제한한다. 앱 계측·전송 설정과 합성 트레이스 검증은 [Tempo 안내](../tempo/README.md)를 따른다. 로그 namespace 목록은 OTLP 접근 제어가 아니다. 트레이스 큐는 메모리 기반이며 로그와 같은 프로세스 자원을 사용한다.
 
 - 단일 인스턴스이며 영속 버퍼를 추가하지 않았다. Alloy 재시작·교체, 장시간 Loki 장애, 노드 로그 회전/삭제 때 로그 유실 또는 재수집이 가능하다. 감사 로그의 무손실 보관 용도가 아니다.
 - API 수집은 파일 직접 읽기보다 kubelet CPU·네트워크 사용량이 증가한다. 대상과 로그량을 늘리기 전에 실측한다.

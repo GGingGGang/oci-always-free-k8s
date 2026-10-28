@@ -34,7 +34,7 @@ OCI의 Always Free 혜택을 활용하도록 설계한 Kubernetes 플랫폼. Ter
 
 Istio ambient enrollment와 전역 `STRICT` 강제 정책은 구별한다. 현재 이 저장소에는 `PeerAuthentication`의 `STRICT` 정책이나 `AuthorizationPolicy` 매니페스트가 없다. Kyverno의 `mutateDigest`와 `verifyDigest`는 모두 `false`로, 서명 검증과 이미지 digest 고정도 구별한다.
 
-Loki·Alloy·Tempo·Kiali, HPA·Prometheus Adapter, 자동 백업·복구, k6 부하 테스트는 현재 이 저장소에 배포 구성이 없는 후속 항목이다. `bao-snapshots` 버킷 선언만으로 OpenBao 자동 백업이 실행되는 것은 아니다.
+Loki·Alloy·[Tempo](./kubernetes/platform/monitoring/tempo/README.md)의 수동 GitOps 설치 설정을 제공한다. 앱 트레이스 계측·Grafana 조회 연결·Kiali, HPA·Prometheus Adapter, 자동 백업·복구, k6 부하 테스트는 후속 항목이다. `bao-snapshots` 버킷 선언만으로 OpenBao 자동 백업이 실행되는 것은 아니다.
 
 ## 아키텍처
 

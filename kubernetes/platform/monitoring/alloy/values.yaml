@@ -44,9 +44,18 @@ alloy:
   resources:
     requests:
       cpu: 100m
-      memory: 128Mi
-    limits:
       memory: 256Mi
+    limits:
+      memory: 512Mi
+  extraPorts:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP
   configMap:
     content: |
       logging {
@@ -95,6 +104,49 @@ alloy:
         external_labels = {cluster = "oci-always-free-k8s"}
         endpoint {
           url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }
+
+      otelcol.receiver.otlp "apps" {
+        grpc {
+          endpoint = "0.0.0.0:4317"
+        }
+        http {
+          endpoint = "0.0.0.0:4318"
+        }
+        output {
+          traces = [otelcol.processor.memory_limiter.traces.input]
+        }
+      }
+
+      otelcol.processor.memory_limiter "traces" {
+        check_interval = "1s"
+        limit = "384MiB"
+        spike_limit = "96MiB"
+        output {
+          traces = [otelcol.processor.batch.traces.input]
+        }
+      }
+
+      otelcol.processor.batch "traces" {
+        timeout = "1s"
+        send_batch_size = 256
+        send_batch_max_size = 512
+        output {
+          traces = [otelcol.exporter.otlp.tempo.input]
+        }
+      }
+
+      otelcol.exporter.otlp "tempo" {
+        client {
+          endpoint = "tempo.monitoring.svc.cluster.local:4317"
+          tls {
+            insecure = true
+          }
+        }
+        sending_queue {
+          num_consumers = 2
+          queue_size = 128
         }
       }
 
