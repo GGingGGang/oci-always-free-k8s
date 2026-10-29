@@ -6,8 +6,6 @@ OKE 클러스터 위에서 동작하는 Kubernetes 매니페스트.
 
 본 트리의 yaml 은 GitHub Actions `yaml-lint` 워크플로가 push/PR 마다 검사한다 — 규칙은 레포 루트 `.yamllint.yaml` (`document-start`/`line-length` 만 완화, 그 외 기본 규칙 전부 적용, `--strict` 차단).
 
-Jenkins는 Helm 차트 `5.10.3`과 본체 `2.580.2-jdk21`을 각각 명시한다. [Jenkins 버전 변경 위치](platform/jenkins/README.md#버전을-변경하는-위치)에서 차트·본체·플러그인·에이전트를 구분한다.
-
 ## 디렉토리
 
 ```

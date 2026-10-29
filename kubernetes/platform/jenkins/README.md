@@ -258,6 +258,8 @@ JCasC가 설정을 다시 생성하더라도 빌드 기록, 작업 공간, 수�
 
 빌드 agent는 동적 Pod (`agent.enabled: true`). 동시 빌드 2개로 제한 (24GB RAM 환경 보호). 빌드 종료 시 Pod 자동 삭제 — stateless.
 
+새 Jenkins 에이전트의 CPU requests는 기본 템플릿과 `jnlp`·`kaniko`·`trivy`·`cosign`에서 모두 `"0"`으로 명시한다. 공유 라이브러리의 `ci()`도 `test` 컨테이너에 같은 값을 지정한다. 메모리 requests와 limits는 기존 값을 유지한다. 이 정책은 CPU 예약량으로 인한 Pending을 줄이며, CPU 경합과 메모리·디스크 압박에 대한 배치 조건은 별도로 적용된다. 기존 실행 Pod의 requests는 변경하지 않는다.
+
 agent image 태그는 `3395.v6e5377b_0fb_3c-1-jdk21`로 고정한다. 이 태그의 공식 registry 매니페스트에 `linux/amd64`와 `linux/arm64`가 포함되어 있음을 확인했다. controller도 Java 21 이미지를 사용한다. registry 매니페스트 확인 명령:
 
 ```bash

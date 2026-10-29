@@ -227,7 +227,7 @@ agent:
 
   resources:
     requests:
-      cpu: 200m
+      cpu: "0"
       memory: 256Mi
     limits:
       memory: 512Mi
@@ -250,7 +250,7 @@ agent:
                 image: docker.io/jenkins/inbound-agent:3395.v6e5377b_0fb_3c-1-jdk21
                 resources:
                   requests:
-                    cpu: 25m
+                    cpu: "0"
                     memory: 256Mi
                   limits:
                     memory: 512Mi
@@ -260,7 +260,7 @@ agent:
                 args: ["99d"]
                 resources:
                   requests:
-                    cpu: 100m
+                    cpu: "0"
                     memory: 1Gi
                   limits:
                     memory: 2Gi
@@ -284,7 +284,7 @@ agent:
                     add: ["DAC_OVERRIDE"]
                 resources:
                   requests:
-                    cpu: 100m
+                    cpu: "0"
                     memory: 256Mi
                   limits:
                     memory: 512Mi
@@ -309,7 +309,7 @@ agent:
                         key: password
                 resources:
                   requests:
-                    cpu: 50m
+                    cpu: "0"
                     memory: 128Mi
                   limits:
                     memory: 256Mi
