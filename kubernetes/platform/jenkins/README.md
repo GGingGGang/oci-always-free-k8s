@@ -16,7 +16,28 @@
 - cert-manager + wildcard Certificate Ready=True (`../../infra/cert-manager/`)
 - external-dns 동작 (`../../infra/external-dns/`)
 - Helm 3.6+
-- 권장 버전: jenkins/jenkins chart `~5.9.0` (ArgoCD `jenkins` Application 은 `5.9.26` 핀)
+- Helm chart `5.10.3`, Jenkins `2.580.2-jdk21` (Java 21), inbound agent `3395.v6e5377b_0fb_3c-1-jdk21`.
+
+### 버전을 변경하는 위치
+
+| 대상 | 파일 | 설정 |
+| --- | --- | --- |
+| Jenkins 본체 | `values.yaml` | `controller.image.tag` |
+| Helm 차트 | `../argocd/apps/jenkins.yaml` | Helm source의 `targetRevision` |
+| 플러그인 전체 버전 | `values.yaml` | `controller.installPlugins` |
+| 기본 빌드 에이전트 | `values.yaml` | `agent.image.tag` |
+| Kaniko Pod의 Jenkins 에이전트 | `values.yaml` | `agent.podTemplates.kaniko`의 `jnlp.image` |
+
+```bash
+rg -n 'tag:|installPlugins:|installLatestPlugins:|initializeOnce:|inbound-agent:' values.yaml
+rg -n 'targetRevision:' ../argocd/apps/jenkins.yaml
+```
+
+차트 버전은 배포 템플릿과 기본 설정을 선택한다. 본체 이미지 태그는 `controller.image.tag`에 별도로 고정한다. `installPlugins`를 삭제하거나 주석 처리하면 차트의 기본 플러그인 목록이 적용된다. Argo CD는 Helm 템플릿을 YAML로 렌더링해 동기화하므로, 다른 Application의 Kustomize 구성과 함께 운영할 수 있다.
+
+2026-10-29 기준 공식 차트 저장소의 최신 버전 `5.10.3`과 LTS `2.580.2`를 확인했다. 본체와 에이전트의 Java 21 이미지에 `linux/arm64` 매니페스트가 있음을 확인했고, 플러그인 84개를 Jenkins `2.580.2` 기준으로 해석한 뒤 전체 버전을 고정했다. 의존성 검증은 `--latest false --no-download --list`로 수행하며 실제 클러스터 기동 검증과 구분한다.
+
+근거: [공식 차트 저장소](https://charts.jenkins.io/), [Jenkins LTS 변경 이력](https://www.jenkins.io/changelog-stable/), [2.580 업그레이드 안내](https://www.jenkins.io/doc/upgrade-guide/2.580/), [Argo CD의 Helm 지원](https://argo-cd.readthedocs.io/en/stable/user-guide/helm/).
 
 ## 2. 설치
 
@@ -93,7 +114,7 @@ kubectl create secret generic jenkins-git-pat \
 helm repo add jenkins https://charts.jenkins.io
 helm repo update
 
-helm install jenkins jenkins/jenkins -n cicd --version "~5.9.0" -f values.yaml --wait
+helm install jenkins jenkins/jenkins -n cicd --version "5.10.3" -f values.yaml --wait
 
 kubectl apply -f httproute.yaml
 ```
@@ -187,44 +208,57 @@ HA controller는 Jenkins 라이선스/플러그인 호환성 폭증. 본 환경�
 
 ### Plugins 전체 pin + `installLatestPlugins: false`
 
-모든 plugin 을 `<name>:<version>` 형식 명시 pin. *재현성 우선* — 같은 values.yaml 로 어디서 install 해도 같은 plugin set. `timestamper` 포함 (Jenkinsfile `options { timestamps() }` 가 요구 — 미설치 시 `Invalid option type "timestamps"` 로 파이프라인 컴파일 실패).
+JCasC의 Job DSL과 GitHub organization folder, Pipeline, Kubernetes agent, `readYaml`, `timestamps`, `publishHTML`에 필요한 플러그인과 전이 의존성 84개를 `installPlugins`에 명시한다. 본체 버전만 올리거나 차트 기본 플러그인 네 개만 설치하면 필요한 기능이 빠질 수 있다.
 
-핵심 plugin 그룹:
+`installLatestPlugins: false`는 의존성의 최소 요구 버전을 사용하게 한다. 이번 구성은 해석된 의존성까지 전부 고정하므로 같은 목록을 다시 검사할 수 있다. `true`를 유지하면 낮게 고정한 플러그인과 새로 선택된 의존성 사이에 버전 충돌이 생길 수 있다.
 
-- **Pipeline 코어**: `workflow-*` 12종 + `pipeline-*` 9종 + `pipeline-model-*` 4종 (Declarative Pipeline 포함)
-- **Kubernetes plugin**: `kubernetes` + `kubernetes-client-api` + `kubernetes-credentials` (동적 agent)
-- **JCasC**: `configuration-as-code` + `snakeyaml-api`
-- **GitHub/Git 연동**: `git`, `git-client`, `github`, `github-api`, `github-branch-source`, `credentials-binding`
-- **UI**: `pipeline-stage-view`, `pipeline-rest-api`
-- **Transitive deps**: API plugin 다수 (`commons-*`, `jackson2-api`, `okhttp-api` 등) — *명시 pin 안 하면 UC-latest 로 떠서 mismatch 발생 위험*
+업그레이드 순서:
 
-명시 일부 pin 만으로는 transitive 통제 불가. `pipeline-model-api/extensions/definition` trio 처럼 release wave 가 어긋나면 Declarative Pipeline 로드 실패. *전체 plugin set 을 한 번에 pin* 하는 것이 유일한 재현성 보장.
+1. 새 Jenkins 본체 버전을 정하고 필요한 직접 플러그인을 별도 목록에 적는다.
+2. 공식 설치 도구로 새 본체 기준의 의존성을 해석한다.
 
-#### Plugin upgrade 절차
-
-CVE 발생 또는 chart bump 시:
-
-1. 안전 환경에서 `installLatestPlugins: true` + 임시 install → 동작 검증
-2. plugin manager 또는 script console 로 실 설치 version 캡처:
    ```bash
-   kubectl exec -n cicd jenkins-0 -c jenkins -- \
-     ls /var/jenkins_home/plugins | awk -F'.jpi' '{print $1}' | sort -u
+   jenkins-plugin-cli --jenkins-version 2.580.2 \
+     --plugin-file plugins-requested.txt --latest true --no-download --list
    ```
-   또는 script console (`http://<jenkins ClusterIP>:8080/script`, tailnet) 에서:
-   ```groovy
-   Jenkins.instance.pluginManager.plugins.each { println "${it.shortName}:${it.version}" }
-   ```
-3. 출력을 values.yaml `installPlugins` 로 박음 (정렬 권장)
-4. `installLatestPlugins: false` 유지
-5. helm upgrade + rollout restart → 재현성 회복
 
-plugin 단독 upgrade ❌ — JCasC + chart + plugin 조합 호환성 검증된 묶음 유지.
+3. 해석된 전체 플러그인과 버전을 `installPlugins`에 반영한다. 동일 목록을 `name:version` 형식의 `plugins.txt`로 준비해 고정된 버전을 다시 검사한다.
+
+   ```bash
+   jenkins-plugin-cli --jenkins-version 2.580.2 \
+     --plugin-file plugins.txt --latest false --no-download --list
+   helm pull jenkins/jenkins --version 5.10.3 --destination /tmp
+   helm lint /tmp/jenkins-5.10.3.tgz -f values.yaml
+   helm template jenkins jenkins/jenkins --version 5.10.3 \
+     -n cicd -f values.yaml > /tmp/jenkins-rendered.yaml
+   ```
+
+4. 아래 `emptyDir` 주의 사항에 따라 데이터를 보존한 뒤 Git에 반영한다. Argo CD에서 차트와 values 변경을 동기화하고 기동 상태를 확인한다.
+
+   ```bash
+   argocd app diff jenkins
+   argocd app sync jenkins
+   kubectl rollout status -n cicd statefulset/jenkins --timeout=300s
+   kubectl logs -n cicd jenkins-0 -c init --tail=60
+   ```
+
+개별 플러그인 버전만 임의로 올리지 말고, 본체와 전체 의존성 목록을 함께 검증한다. `--no-download` 검사는 의존성 검사이며 실제 플러그인 다운로드와 Jenkins 기동 성공을 보장하지 않는다.
+
+### 재부팅 후 초기화와 `emptyDir`
+
+`controller.initializeOnce: true`로 같은 Pod의 Jenkins home에 `initialization-completed` 표식을 남긴다. 완료된 init가 노드 재부팅 후 다시 실행될 때 플러그인 복사 단계에 들어가지 않도록 한다. 차트의 `yes n | cp -i`가 기존 파일의 덮어쓰기를 거부하면 실패 코드로 종료될 수 있기 때문이다.
+
+현재 home은 `emptyDir`이므로 이 표식은 같은 Pod의 볼륨이 남아 있는 동안만 유지된다. Pod가 교체되면 home과 플러그인 볼륨이 새로 만들어져 초기화를 다시 수행한다. 초기화가 완료되기 전에 중단된 경우에는 표식이 없으므로 이전 실패 로그와 복사 대상부터 확인한다. `initializeOnce`만으로 모든 부분 실패를 처리할 수는 없다.
+
+JCasC가 설정을 다시 생성하더라도 빌드 기록, 작업 공간, 수동 변경이 복원되는 것은 아니다. Pod 교체 전에 필요한 home 데이터를 별도로 백업한다. 향후 PVC로 바꾸면 표식이 Pod 교체 후에도 유지되므로 플러그인 업그레이드 때 초기화 정책도 다시 검토한다.
+
+근거: 차트 `5.10.3`의 `templates/config.yaml`, `controller.initializeOnce` 설명과 [플러그인 설치 도구](https://github.com/jenkinsci/plugin-installation-manager-tool), [GNU coreutils 변경 이력](https://raw.githubusercontent.com/coreutils/coreutils/master/NEWS). GNU `cp -i`의 종료 코드 변경은 2023-03-20의 9.2 변경 사항으로 2년을 초과한 자료이며, 사용 중이던 실제 init 스크립트와 실패 로그를 함께 확인했다.
 
 ### Agent — Kubernetes plugin + `containerCap: 2`
 
 빌드 agent는 동적 Pod (`agent.enabled: true`). 동시 빌드 2개로 제한 (24GB RAM 환경 보호). 빌드 종료 시 Pod 자동 삭제 — stateless.
 
-agent image 태그 핀 (`3327.v868139a_d00e0-3-jdk21`) — floating 회피. **`-alpine` variant 비채택**: alpine 태그는 amd64 단일 아키라 A1.Flex(ARM64) 노드에서 `no image found ... architecture "arm64"` 로 pod 기동 실패. `-jdk21`(Debian 기반)은 멀티아치 매니페스트(arm64 포함). registry 매니페스트로 아키 검증:
+agent image 태그는 `3395.v6e5377b_0fb_3c-1-jdk21`로 고정한다. 이 태그의 공식 registry 매니페스트에 `linux/amd64`와 `linux/arm64`가 포함되어 있음을 확인했다. controller도 Java 21 이미지를 사용한다. registry 매니페스트 확인 명령:
 
 ```bash
 token=$(curl -s "https://auth.docker.io/token?service=registry.docker.io&scope=repository:jenkins/inbound-agent:pull" | python3 -c "import sys,json;print(json.load(sys.stdin)['token'])")

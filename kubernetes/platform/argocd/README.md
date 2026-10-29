@@ -229,10 +229,12 @@ adopt 정상 판정: diff 가 `app.kubernetes.io/instance` 라벨 + `argocd.argo
 | loki | `18.15.1` |
 | alloy | `1.13.1` (신규 설치, 미배포) |
 | tempo | `3.2.1` (신규 설치 설정, 수동 Sync) |
-| jenkins | `5.9.26` |
+| jenkins | `5.10.3` |
 | argocd | `7.7.23` |
 | nats | `2.14.2` |
 | kyverno | `3.8.2` |
+
+Jenkins의 본체 버전은 차트 버전과 별도로 [values.yaml의 `controller.image.tag`](../jenkins/values.yaml)에 고정한다. 플러그인과 에이전트 변경 위치는 [Jenkins 운영 안내](../jenkins/README.md#버전을-변경하는-위치)를 따른다.
 
 upgrade 시엔 helm 으로 먼저 올린 뒤(`helm upgrade`) `helm list -A` 로 실측값을 다시 박거나, range 로 풀고 자동 추종. 범위 핀은 새 patch 가 나오면 OutOfSync 노이즈가 생기므로 adopt 단계에선 exact 유지.
 

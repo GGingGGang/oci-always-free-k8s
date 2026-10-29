@@ -8,12 +8,14 @@ Jenkins의 Trivy는 [노드별 hostPath 캐시](jenkins/README.md)를 사용한�
 Trivy에는 Jenkins 공유 작업 경로의 실행·로그 파일에 접근하는 `DAC_OVERRIDE`만 추가하고 나머지 capability는 제거한다.
 2026-10-14 `svc-auth`의 동일 노드 후속 빌드에서 Image Scan은 98.281초에서 27.338초로 단축됐다. [실측 조건과 빌드별 결과](jenkins/README.md#캐시-재사용-실측--2026-10-14)를 기록했다.
 
+Jenkins 본체는 `2.580.2-jdk21`을 명시하고 플러그인 전체 버전을 고정한다. [버전별 변경 위치와 재초기화 동작](jenkins/README.md#버전을-변경하는-위치)을 확인한다.
+
 ## 1. 구성
 
 | 폴더 | 역할 | helm 릴리즈 | NS | 외부 노출 |
 |------|------|------------|-----|----------|
 | `argocd/` | GitOps 컨트롤 플레인 | argo/argo-cd `~7.7.0` | `cicd` (PSA baseline) | tailnet (parked — `argocd.ggang.cloud` 주석 처리) |
-| `jenkins/` | JCasC Jenkins + Kaniko 동적 빌드 | jenkins/jenkins `~5.9.0` | `cicd` controller / `build` 빌드 Pod (PSA privileged) | admin: tailnet (parked) / webhook: `ci-hook.ggang.cloud` `/github-webhook/` (active) |
+| `jenkins/` | JCasC Jenkins + Kaniko 동적 빌드 | jenkins/jenkins `5.10.3` | `cicd` controller / `build` 빌드 Pod (PSA privileged) | admin: tailnet (parked) / webhook: `ci-hook.ggang.cloud` `/github-webhook/` (active) |
 | `openbao/` | 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal, ephemeral) | openbao/openbao `~0.28.0` | `vault` (PSA baseline) | 없음 (port-forward) |
 | `monitoring/kps/` | 관측 (메트릭/알림/대시보드) | prometheus-community/kube-prometheus-stack `~75.0.0` | `monitoring` (PSA baseline) | tailnet (parked — `grafana.ggang.cloud` 주석 처리) |
 | `monitoring/loki/` | 로그 저장소, 기존 관측 PVC의 별도 subPath | grafana-community/loki `18.15.1` | `monitoring` (PSA baseline) | 없음 (ClusterIP) |

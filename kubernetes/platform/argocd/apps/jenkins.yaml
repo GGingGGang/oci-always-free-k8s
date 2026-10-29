@@ -10,7 +10,7 @@ spec:
   sources:
     - repoURL: https://charts.jenkins.io
       chart: jenkins
-      targetRevision: 5.9.26
+      targetRevision: 5.10.3
       helm:
         valueFiles:
           - $values/kubernetes/platform/jenkins/values.yaml
