@@ -27,7 +27,7 @@ OCI의 Always Free 혜택을 활용하도록 설계한 Kubernetes 플랫폼. Ter
 | 인입·TLS·DNS | OCI NLB, Istio Gateway, cert-manager DNS-01, Cloudflare external-dns | [infra 안내](./kubernetes/infra/README.md) |
 | CI/CD | Jenkins JCasC, Kaniko, GHCR, Trivy, cosign, Argo CD | [Jenkins](./kubernetes/platform/jenkins/README.md), [Argo CD](./kubernetes/platform/argocd/README.md) |
 | 보안 | 네임스페이스별 PSA, Istio ambient enrollment, Kyverno 서명 검증 `Enforce` | [네임스페이스](./kubernetes/infra/namespaces/namespaces.yaml), [이미지 정책](./kubernetes/platform/kyverno/policies/verify-image-signature.yaml) |
-| 시크릿 | OpenBao Raft 1 replica, OCI KMS auto-unseal 설정, `emptyDir` 데이터 경로 | [OpenBao 설정](./kubernetes/platform/openbao/values.yaml) |
+| 시크릿 | OpenBao Raft 1 replica, OCI KMS auto-unseal, `data` namespace의 NATS PVC subPath 공유 | [OpenBao 설정](./kubernetes/platform/openbao/values.yaml) |
 | 데이터 | HeatWave `MySQL.Free` 50 GB, Redis, NATS JetStream | [DB 모듈](./terraform/modules/database/main.tf), [Redis](./kubernetes/platform/redis/README.md), [NATS](./kubernetes/platform/nats/README.md) |
 | 관측 | Prometheus, Alertmanager의 Discord 수신자, Grafana 비활성화, Loki·Alloy 수동 GitOps 설치 설정 | [monitoring](./kubernetes/platform/monitoring/README.md), [알림 설정](./kubernetes/platform/monitoring/kps/alertmanager-config.yaml), [Loki](./kubernetes/platform/monitoring/loki/README.md), [Alloy](./kubernetes/platform/monitoring/alloy/README.md) |
 | 관리 접근 | Tailscale subnet router, 관리 UI의 public HTTPRoute 비활성화 | [Tailscale](./kubernetes/infra/tailscale/README.md) |
@@ -97,7 +97,7 @@ platform-root (이 저장소의 argocd/apps/*.yaml)
 | OKE | `BASIC_CLUSTER`, managed node pool | 워커·스토리지·네트워크 사용량은 별도로 확인 |
 | HeatWave | `MySQL.Free`, 데이터 50 GB | 홈 리전 가용성과 무료 적용 여부 |
 | NLB | Istio Gateway가 생성하도록 지정 | 실제 생성 개수와 네트워크 사용량 |
-| Block Volume | Prometheus 50 Gi + NATS 50 Gi PVC | 워커 부트 볼륨과 합산 |
+| Block Volume | Prometheus 50 Gi + NATS/OpenBao 공유 50 Gi PVC | 워커 부트 볼륨과 합산 |
 | Object Storage | `bao-snapshots`, 별도 준비하는 `tfstate` 버킷 | 객체 크기·버전·요청 수 |
 | KMS | Standard Vault, software-protected AES 키 | OpenBao auto-unseal용 |
 
@@ -168,7 +168,7 @@ kubectl get pvc -A
 kubectl get clusterpolicy verify-svc-image-signature
 ```
 
-Prometheus와 NATS는 각각 50 Gi PVC를 요청한다. OpenBao는 `emptyDir` 기반 Raft이고 Redis와 Jenkins도 비영속 구성이므로, PVC 존재 여부와 각 컴포넌트의 데이터 복구 절차를 함께 확인한다. OpenBao의 KMS auto-unseal은 데이터 영속화나 백업을 대신하지 않는다.
+Prometheus와 NATS는 각각 50 Gi PVC를 요청한다. OpenBao는 `data`에서 NATS PVC의 별도 subPath를 사용하며 두 Pod는 같은 노드에 배치한다. 공유 PV는 Retain이고, Redis와 Jenkins는 비영속 구성이므로 각 컴포넌트의 복구 절차를 함께 확인한다. OpenBao의 KMS auto-unseal은 데이터 영속화나 백업을 대신하지 않는다.
 
 ## 디렉터리와 문서
 

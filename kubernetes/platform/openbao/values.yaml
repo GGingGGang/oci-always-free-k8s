@@ -1,10 +1,15 @@
 global:
+  namespace: data
   tlsDisable: true
 
 server:
+  image:
+    registry: quay.io
+    repository: openbao/openbao
+    tag: "2.6.0"
   resources:
     requests:
-      cpu: 100m
+      cpu: 50m
       memory: 256Mi
     limits:
       memory: 512Mi
@@ -14,10 +19,41 @@ server:
 
   volumes:
     - name: data
-      emptyDir: {}
+      persistentVolumeClaim:
+        claimName: nats-js-nats-0
   volumeMounts:
     - name: data
       mountPath: /openbao/data
+      subPath: openbao
+
+  extraLabels:
+    storage.ggang.cloud/volume: shared-data
+
+  affinity: |
+    podAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              storage.ggang.cloud/volume: shared-data
+          topologyKey: kubernetes.io/hostname
+
+  statefulSet:
+    securityContext:
+      pod:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      container:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+
+  authDelegator:
+    enabled: false
 
   auditStorage:
     enabled: false
@@ -56,10 +92,4 @@ ui:
   enabled: true
 
 injector:
-  enabled: true
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-    limits:
-      memory: 128Mi
+  enabled: false

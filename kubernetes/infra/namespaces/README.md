@@ -24,7 +24,7 @@ kubectl apply -f namespaces.yaml
 | `cicd` | ArgoCD, Jenkins (PSA `enforce=baseline`, Istio ambient enrolled) |
 | `build` | Kaniko 빌드 Pod 전용 (PSA `enforce=privileged`) |
 | `monitoring` | kube-prometheus-stack (Prometheus/Alertmanager/Grafana, PSA `enforce=baseline`) — Loki/Tempo/Kiali 는 예정 |
-| `vault` | OpenBao (PSA `enforce=baseline`, Istio ambient enrolled) |
+| `vault` | 이전 OpenBao namespace. 현재 workload 없음, namespace 삭제는 별도 관리 |
 | `tailscale` | Tailscale subnet router (PSA `enforce=baseline`) |
 | `app` | 워크로드 (PSA `enforce=restricted`, Istio ambient enrolled) |
 | `core` | MSA 도메인 API 서비스 (PSA `enforce=restricted`, Istio ambient enrolled) |
@@ -32,7 +32,7 @@ kubectl apply -f namespaces.yaml
 | `auth` | MSA 도메인 auth API 서비스 (PSA `enforce=restricted`, Istio ambient enrolled) |
 | `notify` | 알림 워크로드 (PSA `enforce=restricted`, Istio ambient enrolled, 이미지 서명 검증) |
 | `web` | 웹 워크로드 (PSA `enforce=restricted`, Istio ambient enrolled, 이미지 서명 검증) |
-| `data` | 백킹 데이터 서비스 — Redis, NATS (PSA `enforce=baseline`, Istio ambient enrolled) |
+| `data` | 백킹 데이터 서비스 — Redis, NATS, OpenBao (PSA `enforce=baseline`, Istio ambient enrolled) |
 | `kyverno` | Kyverno 정책 엔진 — admission 이미지 서명 검증 (PSA `enforce=baseline`) |
 
 ## 3. 검증
@@ -128,3 +128,5 @@ pod-security.kubernetes.io/audit: restricted
 ### `verify-images` 라벨
 
 `core`/`batch`/`auth`/`notify`/`web`에 `verify-images: "true"`. Kyverno `verify-svc-image-signature` 정책(`../../platform/kyverno/README.md`)이 `namespaceSelector`로 이 라벨을 매칭한다. 신규 서비스 온보딩 때 이 라벨을 네임스페이스 선언과 함께 추가해야 서명 검증 범위에 포함된다. `jenkins-shared-library`의 `ci()`가 `services.yaml` `defaults.sign: true`로 서비스 서명을 기본값으로 사용하므로, 서명 없이 라벨만 먼저 붙이면 Enforce 상태에서 admission이 거부될 수 있다.
+
+OpenBao의 현재 endpoint는 `openbao.data.svc.cluster.local:8200`이다. `vault` namespace 선언은 다른 리소스의 삭제를 피하려고 유지하며 기존 OpenBao Helm 릴리스는 사용하지 않는다. 과거 vault enrollment 설명은 이전 구성의 배경이다.

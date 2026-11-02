@@ -34,6 +34,16 @@ container:
       readOnlyRootFilesystem: true
       capabilities:
         drop: ["ALL"]
+  patch:
+    - op: test
+      path: /volumeMounts/2/name
+      value: nats-js
+    - op: replace
+      path: /volumeMounts/2/mountPath
+      value: /data/jetstream
+    - op: add
+      path: /volumeMounts/2/subPath
+      value: jetstream
 
 reloader:
   enabled: true
@@ -77,12 +87,23 @@ promExporter:
 
 podTemplate:
   merge:
+    metadata:
+      labels:
+        storage.ggang.cloud/volume: shared-data
     spec:
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  storage.ggang.cloud/volume: shared-data
+              topologyKey: kubernetes.io/hostname
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
 

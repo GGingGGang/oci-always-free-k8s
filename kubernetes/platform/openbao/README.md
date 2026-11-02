@@ -1,128 +1,111 @@
 # OpenBao
 
-시크릿 저장소. Raft 단일 replica + OCI KMS auto-unseal (instance principal). Agent Injector 동반. raft 데이터는 **파드 수명**(블록 볼륨 미사용) — §4 `dataStorage` 비활성 참조.
+`data` namespace의 단일 Raft 서버. OCI KMS instance principal로 auto-unseal하고 기존 NATS PVC의 `openbao` subPath에 데이터를 저장한다. Helm chart `openbao/openbao` **0.28.5**, 서버 이미지 **2.6.0**을 사용한다. Agent Injector는 비활성화하며 ESO 연결은 별도로 구성한다.
 
-참조:
-- https://github.com/openbao/openbao-helm (chart `openbao/openbao`)
-- https://openbao.org/docs/configuration/seal/ocikms/ (2026-06 확인)
+## 저장소와 배치
 
-## 1. 전제 조건
+| 항목 | 설정 |
+|---|---|
+| PVC | `data/nats-js-nats-0`, 50Gi, RWO, `oci-bv` |
+| OpenBao | `openbao` subPath → `/openbao/data`, UID 100, mode 0700 |
+| NATS | `jetstream` subPath → `/data/jetstream`, UID 1000 |
+| PV 삭제 정책 | `Retain` |
+| requests | CPU 50m / 메모리 256Mi |
+| limits | 메모리 512Mi, CPU 상한 없음 |
 
-- terraform apply 완료 — `kms` 모듈 (Vault + unseal key) + `iam` 모듈 (Dynamic Group + Policy). `terraform output`으로 `kms_*` 3종 확인
-- `vault` 네임스페이스 + PSA `enforce=baseline` (`../../infra/namespaces/`)
-- 블록 볼륨 불요 — `server.dataStorage.enabled: false`. 대신 `server.volumes`/`volumeMounts` 로 emptyDir 를 `/openbao/data` 에 마운트 필수 — 이미지에 이 디렉터리가 없어 미마운트 시 raft 기동 실패(`failed to open bolt file ... no such file or directory`)
-- Helm 3.6+
-- 권장 버전: openbao/openbao chart `~0.28.0` (2026-06 작성 시점 0.28.3, 설치 전 `helm search repo openbao/openbao --versions` 확인)
+두 Pod에 `storage.ggang.cloud/volume: shared-data` 라벨과 필수 Pod affinity를 설정해 같은 노드에 배치한다. 첫 Pod는 자신의 라벨을 만족하는 self-affinity로 배치할 수 있다. 같은 RWO PVC를 사용하는 두 Pod를 서로 다른 노드에서 동시에 실행하지 않는다. replicas를 늘려 HA로 전환하려면 각 Raft 인스턴스에 독립 PVC와 장애 도메인이 필요하다.
 
-## 2. 설치
+두 Pod의 fsGroup은 1000이고 `fsGroupChangePolicy: OnRootMismatch`를 사용한다. 볼륨 루트가 올바른 그룹과 권한을 유지해야 하위 디렉터리에 재귀적 권한 변경이 발생하지 않는다. OpenBao 디렉터리는 `100:1000:700`을 유지한다. subPath는 용량 쿼터나 독립 볼륨 수준의 보안 경계가 아니다. NATS의 45Gi 상한과 별개로 OpenBao 사용량 및 볼륨 전체 여유 공간도 관측한다.
 
-placeholder 치환본은 git 추적 제외(`*.local.*`)로 분리:
+## 공유 PVC 준비
+
+NATS values의 subPath·affinity 설정을 먼저 반영하고 기존 stream/consumer와 송수신을 확인한다. 기존 JetStream 물리 경로는 옮기지 않는다. NATS가 PVC 전체를 마운트한 상태에서 OpenBao 데이터를 넣지 않는다.
+
+```bash
+set -e
+NATS_PV=$(kubectl get pvc -n data nats-js-nats-0 -o jsonpath='{.spec.volumeName}')
+test -n "$NATS_PV"
+kubectl patch pv "$NATS_PV" --type=merge -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+kubectl get pv "$NATS_PV"
+kubectl apply -f storage-prepare.yaml
+kubectl wait -n data --for=condition=complete job/openbao-storage-prepare --timeout=180s
+kubectl logs -n data job/openbao-storage-prepare
+kubectl delete job -n data openbao-storage-prepare
+```
+
+준비 Job은 root와 CHOWN capability로 새 `openbao` 디렉터리만 생성한다. 기존 디렉터리의 소유권·권한이 예상과 다르면 실패하며, 기존 데이터에 재귀적 chown/chmod를 하지 않는다. ServiceAccount 토큰은 마운트하지 않는다. namespace의 PSA baseline에서 실행 가능하며 restricted 경고는 예상된다.
+
+Retain은 PVC 삭제 시 backing volume의 자동 삭제를 막는다. 백업을 대신하지 않는다. 공유 PVC는 NATS StatefulSet에서 생성되므로 NATS 제거·PVC 정리 시 OpenBao 사용 여부도 확인한다.
+
+## 설치
+
+`data` namespace, NATS PVC, KMS 키와 instance principal 접근 권한이 필요하다. 기존 `vault` 설치의 values.local.yaml을 그대로 재사용하지 말고 현재 values에서 생성한다.
 
 ```bash
 KEY_ID=$(terraform -chdir=../../../terraform output -raw kms_unseal_key_id)
 CRYPTO=$(terraform -chdir=../../../terraform output -raw kms_crypto_endpoint)
 MGMT=$(terraform -chdir=../../../terraform output -raw kms_management_endpoint)
 
-sed -e "s|<your-kms-key-ocid>|${KEY_ID}|" \
-    -e "s|<your-kms-crypto-endpoint>|${CRYPTO}|" \
-    -e "s|<your-kms-management-endpoint>|${MGMT}|" \
-    values.yaml > values.local.yaml
-```
+sed -e "s|<your-kms-key-ocid>|${KEY_ID}|" -e "s|<your-kms-crypto-endpoint>|${CRYPTO}|" -e "s|<your-kms-management-endpoint>|${MGMT}|" values.yaml > values.local.yaml
 
-```bash
 helm repo add openbao https://openbao.github.io/openbao-helm
-helm repo update
-
-helm install openbao openbao/openbao -n vault --version "~0.28.0" -f values.local.yaml
+helm upgrade --install openbao openbao/openbao -n data --version 0.28.5 -f values.local.yaml
+kubectl exec -n data openbao-0 -- bao status
 ```
 
-초기화 — auto-unseal 환경이라 unseal key 대신 **recovery key**가 발급됨:
+처음에는 Initialized=false이므로 초기화 전 Ready가 되지 않는다. 이미 초기화된 저장소에 `operator init`을 다시 실행하지 않는다. 데이터가 있는 이전 설치를 옮길 때는 snapshot 복구 등 별도 데이터 이전이 필요하다. namespace 변경은 데이터를 복사하지 않는다.
+
+빈 저장소의 최초 초기화 결과는 Git·동기화 폴더 밖의 접근 제한 파일에 저장한다.
 
 ```bash
-kubectl exec -n vault openbao-0 -- bao operator init
+set -e
+BACKUP_DIR="$HOME/.local/share/openbao-bootstrap"
+umask 077
+mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
+test ! -e "$BACKUP_DIR/bootstrap.json"
+set -C
+kubectl exec -n data openbao-0 -- bao operator init -format=json > "$BACKUP_DIR/bootstrap.json"
+set +C
+chmod 600 "$BACKUP_DIR/bootstrap.json"
 ```
 
-출력된 recovery key 5장 + initial root token을 **오프라인 보관** (git, 클러스터, 노트북 단일 저장 금지. 분산 보관).
+recovery key와 초기 root token은 오프라인으로 별도 보관한다. root token을 자동화의 상시 인증으로 사용하지 않는다. recovery key는 KMS 키를 대신해 데이터를 복호화하지 못한다. KMS 키와 IAM 접근 권한도 유지한다.
 
-## 3. 검증
+## 확인과 운영
 
 ```bash
-kubectl get pods -n vault
-kubectl exec -n vault openbao-0 -- bao status
-# 기대: Initialized=true, Sealed=false, Recovery Seal Type=shamir, Seal Type 항목에 ocikms 반영
+kubectl get pods -n data -o wide
+kubectl exec -n data openbao-0 -- bao status
+kubectl exec -n data openbao-0 -- stat -c '%u:%g:%a' /openbao/data
+kubectl exec -n data nats-0 -c nats -- wget -qO- localhost:8222/jsz
+kubectl port-forward -n data svc/openbao 8200:8200
 ```
 
-auto-unseal 동작은 **init 직후 상태로 확인** — `bao operator init` 이 사람의 unseal 키 입력 없이 끝나고 곧바로 `Sealed=false` 면 KMS seal 이 동작한 것.
+정상 상태는 Initialized=true, Sealed=false, storage=raft, seal=ocikms다. API 주소는 `http://openbao.data.svc.cluster.local:8200`이다. listener는 평문이므로 Istio ambient enrollment와 실제 caller 경로의 mTLS를 확인한다. namespace 라벨만으로 모든 클라이언트의 보호를 보장하지 않는다.
 
-> 파드 재삭제로 auto-unseal 을 재검증하지 말 것. raft 가 파드 수명이라 재시작은 **저장 데이터 전소 + uninitialized 복귀**다 (§5).
+PVC 검증은 인증된 시험 값을 기록하고 새 data/OpenBao Pod를 교체한 뒤 cluster ID·시험 값·auto-unseal의 유지를 확인한다. 이전 emptyDir 설치의 Pod를 삭제해서 시험하지 않는다. Helm StatefulSet 갱신 전략은 OnDelete이므로 Helm upgrade만으로 기존 Pod가 교체되지 않는다.
 
-UI는 외부 비노출 — 필요 시:
+`server.authDelegator.enabled: false`이며 Kubernetes auth는 아직 구성하지 않았다. ESO 연결 시 `data/openbao` ServiceAccount의 TokenReview 권한, OpenBao auth role/policy와 소비 namespace의 SecretStore를 함께 구성한다. 이전 릴리스의 공용 ClusterRoleBinding을 새 릴리스가 자동 인수하지 않는다.
+
+단일 서버는 HA가 아니다. 노드·볼륨 장애는 함께 배치된 NATS에도 영향을 준다. 다른 노드에서 재개하려면 이전 노드의 안전한 분리와 볼륨 재연결이 필요하다. ESO로 이미 동기화된 유효한 Secret을 쓰는 앱은 OpenBao 중단만으로 즉시 중단되지는 않지만 신규 동기화와 갱신은 실패한다.
+
+## Snapshot
+
+인증과 권한을 갖춘 CLI에서 실행한다. subPath여도 Raft snapshot은 가능하고 NATS 파일은 포함하지 않는다.
 
 ```bash
-kubectl port-forward -n vault svc/openbao 8200:8200
-# http://localhost:8200
+bao operator raft snapshot save openbao.snap
 ```
 
-## 4. 결정
+파일은 CLI 실행 위치에 저장된다. 공유 PVC 외부에 보관하고 복구를 별도로 검증한다. 자동 백업은 아직 구성하지 않았다.
 
-### OpenBao (Vault 비채택)
+## 근거
 
-HashiCorp Vault는 2023-08부터 BSL 1.1 (2.5년 경과 정보 — 이후 라이선스 정책 변동 여부 확인 권장). OpenBao는 MPL 2.0 + Linux Foundation 거버넌스. self-host 환경이라 BSL의 직접 제약은 없으나, 라이선스 변경 리스크 차단 + 스택 전반의 자유 라이선스 일관성으로 OpenBao 채택. Vault helm chart fork라 구조 동일 — 마이그레이션 비용 낮음.
+- [OpenBao Helm chart](https://github.com/openbao/openbao-helm): 고정 chart 0.28.5 렌더 결과로 검증.
+- [OpenBao Raft snapshot](https://openbao.org/docs/commands/operator/raft/#snapshot)
+- [OpenBao OCI KMS seal](https://openbao.org/docs/configuration/seal/ocikms/)
+- [Kubernetes RWO](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes)
+- [Kubernetes 볼륨 권한](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#configure-volume-permission-and-ownership-change-policy-for-pods)
 
-### ocikms seal + instance principal
-
-API key 방식 비채택 — 키 파일을 Pod에 배포/회전하는 부담 제거. 워커 인스턴스의 identity(Dynamic Group)로 KMS 호출.
-
-폭발 반경 트레이드오프: instance principal은 노드 단위 신원이라, **metadata service(169.254.169.254)에 닿는 모든 Pod이 같은 권한 획득 가능**. 완화:
-
-- Policy를 `use keys` + `target.key.id` 단일 키로 한정 — 탈취해도 unseal 키 encrypt/decrypt만 가능, 키 자체 export 불가
-- metadata service 접근 차단은 CIDR egress 정책이 필요해 현행 CNI(Flannel — 정책 CNI 미도입)로는 불가. 노드 레거시 IMDS(v1) 엔드포인트 비활성화의 OKE 적용 가능 여부 확인 후 완화 검토
-
-### software-protected key
-
-HSM 키는 키 버전당 과금, software 키는 무료 — Always Free 0원 유지. FIPS 140-2 Level 3 경계 포기 트레이드오프 (개인 운영 환경에서 수용).
-
-### Raft 단일 replica
-
-3 replica HA는 노드 2개 환경에서 anti-affinity 미충족 + quorum(2/3) 의미 없음. 단일 replica + auto-unseal 조합:
-
-- pod 다운 시: 이미 주입된 시크릿은 각 Pod 메모리에 유지, 신규 Pod만 시크릿 대기
-- 재기동 ~5분, auto-unseal 이라 무인. 저장 데이터는 남지 않음
-
-### TLS 종료 위임 (tls_disable)
-
-listener 평문 — `vault` 네임스페이스가 Istio Ambient에 enrolled되어 있어(`istio.io/dataplane-mode: ambient`), 메시 내부 caller↔OpenBao hop은 ztunnel L4 mTLS로 보호된다. 라벨이 곧 스위치 — enrollment 없으면 내부 hop도 평문이므로 이 전제는 `vault` enrolled 상태에 의존한다. ArgoCD `--insecure`와 동일 패턴. 외부 노출 자체가 없어 Gateway TLS 경로도 불요. (보호는 *메시 내부* hop 한정 — 현재 ESO 등 in-mesh caller는 후속.)
-
-### Agent Injector (일부 시크릿은 ESO 필수로 확정)
-
-annotation 기반 sidecar 주입을 기본 채택하되, `ghcr-push`/`ghcr-pull`처럼 **Pod 생성 이전에 이미 존재해야 하는 k8s Secret 객체**(imagePullSecret, projected volume 참조)는 Injector 로 구조적으로 만들 수 없음 — Injector는 Pod 내부에 런타임 파일을 주입할 뿐 Secret 오브젝트 자체를 사전 생성하지 못하는 닭-달걀 문제. 이 부류는 **ESO 채택 확정**. 그 외(런타임에 파일/env 로 받아도 되는 시크릿, 예: DB 자격증명)는 Injector 유지. 두 방식이 시크릿 종류별로 공존.
-
-## 5. 주의 사항
-
-### 파드 재시작 = 재초기화
-
-raft 가 파드 수명이라 재시작하면 저장된 시크릿이 전부 사라지고 uninitialized 로 올라온다. `bao operator init` 재실행 + recovery key/root token 재발급 필요. 시크릿을 OpenBao 로 이관할수록 이 비용이 커진다.
-
-### recovery key
-
-auto-unseal에서 recovery key는 seal 마이그레이션·rekey·일부 운영 행위에만 사용 — 일상 unseal에는 불필요. 분실 시 KMS 키 장애와 겹치면 복구 불가. init 출력은 1회성.
-
-### KMS 의존 = unseal 경로의 단일 실패점
-
-OpenBao 기동 시마다 KMS 호출 필요. OCI KMS 장애 또는 Policy/Dynamic Group 변경 실수 시 재기동 불가 (떠있는 인스턴스는 영향 없음). Policy 변경은 plan diff 확인 후 적용.
-
-### KMS vault 삭제 대기
-
-OCI KMS vault는 즉시 삭제 불가 — 최소 7일 pending deletion. `terraform destroy` 시 해당 기간 동안 같은 이름 재생성 충돌 주의.
-
-### unseal 키 회전
-
-OCI KMS 키 rotation은 새 key version 생성 방식 — `key_id` 불변이라 OpenBao 설정 변경 불요. `key_id` 자체를 바꾸려면 shamir로 seal migration 후 재마이그레이션 필요.
-
-### cold-start / DR 복구 순서
-
-```
-terraform (KMS + IAM) → OKE 노드 → namespaces → openbao (auto-unseal) → 시크릿 소비 컴포넌트
-```
-
-시크릿을 OpenBao로 이관할수록 이 순서가 복구의 크리티컬 패스가 됨. 수동 적용 흐름 문서를 이 순서와 정합하게 유지할 것.
+공식 웹 문서의 작성일은 미확정이다. 최신 웹 문서와 설치 버전의 차이는 chart 렌더와 실제 실행으로 검증한다.

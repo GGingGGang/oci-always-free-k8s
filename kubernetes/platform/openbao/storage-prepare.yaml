@@ -1,0 +1,61 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openbao-storage-prepare
+  namespace: data
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 180
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: nats
+                  app.kubernetes.io/instance: nats
+              topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: prepare
+          image: docker.io/library/nats:2.14.2-alpine
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              test -d /shared/jetstream
+              test ! -L /shared/openbao
+              if [ ! -e /shared/openbao ]; then
+                mkdir -m 0700 /shared/openbao
+                chmod 0700 /shared/openbao
+                chown 100:1000 /shared/openbao
+              fi
+              test -d /shared/openbao
+              test "$(stat -c '%u:%g:%a' /shared/openbao)" = '100:1000:700'
+              echo 'OpenBao storage directory ready; existing JetStream data unchanged.'
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+          volumeMounts:
+            - name: shared
+              mountPath: /shared
+      volumes:
+        - name: shared
+          persistentVolumeClaim:
+            claimName: nats-js-nats-0

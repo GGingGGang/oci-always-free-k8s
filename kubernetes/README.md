@@ -23,7 +23,7 @@ kubernetes/
 ├── platform/             # CI/CD · 관측 · 보안 등 플랫폼 컴포넌트
 │   ├── argocd/           # GitOps 컨트롤 플레인 (helm + HTTPRoute)
 │   ├── jenkins/          # JCasC + emptyDir, 동적 agent (+ Kaniko podTemplate in build NS)
-│   ├── openbao/          # 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal + Injector, ephemeral)
+│   ├── openbao/          # 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal, data NS의 NATS PVC 공유)
 │   ├── monitoring/       # 관측 스택
 │   │   ├── kps/          # Prometheus / Alertmanager
 │   │   ├── loki/         # 로그 저장소

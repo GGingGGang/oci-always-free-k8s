@@ -110,3 +110,11 @@ nats-box 는 상주시키지 않고 필요할 때 일회성 파드로(§3). PDB 
 ### PVC 크기 하향 불가
 
 `oci-bv` 는 확장만 가능하고 축소가 안 된다. 50Gi 는 OCI 최소 생성 단위라 더 작게 잡을 수도 없다.
+
+## 공유 PVC 운영
+
+OpenBao가 같은 namespace에서 `nats-js-nats-0`의 별도 subPath를 사용한다. NATS는 기존 PVC의 `jetstream`을 `/data/jetstream`에 마운트하며 JetStream store 설정 `/data`와 실제 데이터 경로를 유지한다. 차트의 컨테이너 patch는 세 번째 mount가 `nats-js`인지 test한 뒤 변경하므로 차트 버전 변경 때 다시 렌더 검증한다.
+
+두 Pod는 `storage.ggang.cloud/volume: shared-data` 라벨과 필수 Pod affinity로 같은 노드에 배치한다. fsGroupChangePolicy는 OnRootMismatch이며 공유 PV는 Retain으로 운영한다. NATS의 PVC를 삭제하거나 볼륨 전체를 chmod/chown하면 OpenBao에도 영향을 준다. OpenBao 폴더 준비와 검증은 [OpenBao 설치 절차](../openbao/README.md)를 따른다.
+
+NATS의 maxSize 45Gi는 OpenBao 용량 예약이 아니다. 볼륨 전체 여유 공간을 함께 관측한다. NATS 재시작 후 기존 stream/consumer와 처리 순번, 실제 송수신을 확인한다.

@@ -14,7 +14,7 @@ Trivy에는 Jenkins 공유 작업 경로의 실행·로그 파일에 접근하�
 |------|------|------------|-----|----------|
 | `argocd/` | GitOps 컨트롤 플레인 | argo/argo-cd `~7.7.0` | `cicd` (PSA baseline) | tailnet (parked — `argocd.ggang.cloud` 주석 처리) |
 | `jenkins/` | JCasC Jenkins + Kaniko 동적 빌드 | jenkins/jenkins `5.10.3` | `cicd` controller / `build` 빌드 Pod (PSA privileged) | admin: tailnet (parked) / webhook: `ci-hook.ggang.cloud` `/github-webhook/` (active) |
-| `openbao/` | 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal, ephemeral) | openbao/openbao `~0.28.0` | `vault` (PSA baseline) | 없음 (port-forward) |
+| `openbao/` | 시크릿 저장소 (Raft 1 + OCI KMS auto-unseal, NATS PVC subPath 공유, Injector 비활성) | openbao/openbao `0.28.5` | `data` (PSA baseline) | 없음 (port-forward) |
 | `monitoring/kps/` | 관측 (메트릭/알림/대시보드) | prometheus-community/kube-prometheus-stack `~75.0.0` | `monitoring` (PSA baseline) | tailnet (parked — `grafana.ggang.cloud` 주석 처리) |
 | `monitoring/loki/` | 로그 저장소, 기존 관측 PVC의 별도 subPath | grafana-community/loki `18.15.1` | `monitoring` (PSA baseline) | 없음 (ClusterIP) |
 | `monitoring/alloy/` | 앱 namespace 6개의 API 로그 수집 → Loki, 단일 Deployment | grafana/alloy `1.13.1` | `monitoring` (PSA baseline) | 없음 (ClusterIP) |
@@ -39,14 +39,14 @@ infra 부트스트랩 완료 후:
 ```
 1. argocd       helm + httproute
 2. jenkins      rbac + Secret(ghcr-push@build · jenkins-git-pat@cicd · jenkins-admin-fixed@cicd) + helm + webhook httproute
-3. openbao      terraform (kms + iam) 선행 → helm + operator init
+3. nats         JetStream file store + oci-bv PVC 50Gi
 4. monitoring   helm (kube-prometheus-stack) + httproute
 5. redis        kubectl apply (raw manifest, data NS)
-6. nats         helm (JetStream file store, oci-bv PVC 50Gi)
+6. openbao      terraform (kms + iam) + NATS PVC 준비 → data에 Helm 설치 → 빈 저장소만 초기화
 7. kyverno      helm → ClusterPolicy (정책은 kyverno CRD 선행)
 ```
 
-대체로 상호 독립 — argocd/jenkins/monitoring(kps)/redis 는 순서 무관. openbao 만 terraform 선행(KMS 키 + Dynamic Group/Policy), kyverno 정책(ClusterPolicy)은 kyverno 차트(CRD) 선행. 각 단계 상세는 해당 폴더 README 참조.
+대체로 상호 독립 — argocd/jenkins/monitoring(kps)/redis 는 순서 무관. openbao는 terraform(KMS 키 + Dynamic Group/Policy)과 NATS PVC 선행, kyverno 정책(ClusterPolicy)은 kyverno 차트(CRD) 선행. 각 단계 상세는 해당 폴더 README 참조.
 
 ## 4. 외부 노출 / TLS
 

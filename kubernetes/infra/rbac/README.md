@@ -33,6 +33,7 @@ ArgoCD / Prometheus(kube-prometheus-stack)는 아직 전용 `rbac.yaml`이 없�
 | Tailscale router | `tailscale/tailscale` | `tailscale` NS Secret create + `tailscale-state` get/update/patch (노드 state 영속) | Role + RoleBinding | `infra/tailscale/rbac.yaml` |
 | Loki | `monitoring/loki` | API 권한 추가 없음, token 자동 마운트 비활성 | SA only (chart) | `platform/monitoring/loki/values.yaml` |
 | Alloy | `monitoring/alloy` | `app/web/auth/core/batch/notify` Pod get/list/watch, pods/log get | Role + RoleBinding (chart override) | `platform/monitoring/alloy/values.yaml` |
+| OpenBao | `data/openbao` | `data` Pod get/watch/list/update/patch, TokenReview 미부여 | Role + RoleBinding (chart) | `platform/openbao/values.yaml` |
 
 ArgoCD/Prometheus는 위 §개요 참조 — chart 기본 RBAC 사용 중이라 본 표 미등재.
 
@@ -219,3 +220,7 @@ Jenkins SA에 *ArgoCD 권한*, ArgoCD SA에 *Vault 권한* 같은 cross-componen
 ### 본 문서의 진행 상태 유지
 
 새 컴포넌트 도입 시 권한 매트릭스(2번)에 항목 추가 + 상태 업데이트. 진행 상태 표가 *실제 적용 상태*와 어긋나면 본 문서의 가치 ↓.
+
+## OpenBao data namespace
+
+OpenBao chart 0.28.5가 `data/openbao` ServiceAccount와 `openbao-discovery-role`, `openbao-discovery-rolebinding`을 관리한다. Role은 data namespace Pod의 get/watch/list/update/patch를 허용하여 서버 상태 라벨을 갱신한다. 현재 authDelegator는 비활성으로 TokenReview 권한은 부여하지 않았다. ESO 연결 시 전용 인증 설정과 함께 추가한다. Agent Injector는 비활성이다.
