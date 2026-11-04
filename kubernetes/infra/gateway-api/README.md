@@ -25,11 +25,14 @@ CRD 8개 + ValidatingAdmissionPolicy 1개 설치:
 ## 3. 검증
 
 ```bash
-kubectl get crd -l gateway.networking.k8s.io/bundle-version
-kubectl get crd -o jsonpath='{range .items[?(@.metadata.annotations.gateway\.networking\.k8s\.io/bundle-version)]}{.metadata.name}{"\t"}{.metadata.annotations.gateway\.networking\.k8s\.io/bundle-version}{"\n"}{end}'
+kubectl get crd gatewayclasses.gateway.networking.k8s.io gateways.gateway.networking.k8s.io \
+  httproutes.gateway.networking.k8s.io grpcroutes.gateway.networking.k8s.io \
+  tlsroutes.gateway.networking.k8s.io backendtlspolicies.gateway.networking.k8s.io \
+  referencegrants.gateway.networking.k8s.io listenersets.gateway.networking.k8s.io \
+  -o custom-columns='NAME:.metadata.name,VERSION:.metadata.annotations.gateway\.networking\.k8s\.io/bundle-version'
 ```
 
-모든 CRD가 `v1.5.0` 으로 표기되어야 함.
+위 8개 CRD의 bundle-version annotation이 모두 `v1.5.0` 이어야 함.
 
 ## 4. 결정
 
@@ -37,7 +40,7 @@ kubectl get crd -o jsonpath='{range .items[?(@.metadata.annotations.gateway\.net
 
 Istio `base` chart는 Gateway API CRD를 번들하지 않음 — 클러스터에 CRD가 미리 설치돼 있어야 istiod가 Gateway API 지원을 활성화함. (istio/base에 `enableGatewayCRDs` 식 자동 설치 값을 넣자는 건 커뮤니티 제안 단계로 미병합 — istio/istio Discussion #57636, 작성 시점 2026-06.)
 
-따라서 Gateway API CRD는 본 매니페스트에서 단독 설치·버전 핀. CRD 버전 소유권이 이 레포에 있어 Istio 업그레이드와 독립적으로 관리됨 — 단 Istio가 지원하는 Gateway API 버전 범위와 교집합 안에서만 갈아끼움(5장).
+따라서 Gateway API CRD는 위 원격 release 매니페스트로 수동 설치·버전 핀하며 Argo CD Application에 포함하지 않는다. Istio 업그레이드와 독립적으로 관리하되 Istio가 지원하는 Gateway API 버전 범위와 교집합 안에서만 갈아끼움(5장).
 
 istiod의 Gateway 자동 프로비저닝(`PILOT_ENABLE_GATEWAY_API_DEPLOYMENT_CONTROLLER`)은 CRD 설치와 무관한 별개 기능 — Gateway 리소스로부터 게이트웨이 데이터플레인(Service+Deployment)을 띄우는 데 사용하며 istiod default(켜짐) 유지.
 
@@ -49,7 +52,7 @@ Standard channel — GA + Beta 리소스만. Experimental channel(`experimental-
 
 ### Server-side apply
 
-`--server-side`로 적용. CRD가 client-side annotation 제한 초과 + 추후 cert-manager/Istio가 동일 CRD를 server-side 소유권으로 reconcile할 때 충돌 회피.
+`--server-side`로 적용. CRD가 client-side annotation 크기 제한을 초과하므로 server-side apply를 사용한다. 다른 관리자가 같은 필드를 변경하면 소유권 충돌이 발생할 수 있다.
 
 ## 5. 주의 사항
 

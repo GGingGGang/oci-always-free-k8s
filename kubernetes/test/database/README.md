@@ -4,11 +4,13 @@ OKE worker subnet → HeatWave MySQL (`10.0.201.0/28`, port 3306) 의 L4 reachab
 
 본 테스트가 통과해야 추후 앱이 DB 에 붙을 수 있음. 통과 전에 앱 stack (Redis / 앱 서버) 진입 X.
 
+모든 명령은 저장소 루트에서 실행합니다.
+
 ## 1. 전제 조건
 
 - Terraform apply 완료 → HeatWave MySQL 가 떠 있어야
-- `terraform output heatwave_ip` 값 확보 (예: `10.0.201.7`)
-- `terraform output heatwave_port` 값 확인 (`3306`)
+- `terraform -chdir=terraform output heatwave_ip` 값 확보 (예: `10.0.201.7`)
+- `terraform -chdir=terraform output heatwave_port` 값 확인 (`3306`)
 - `terraform.tfvars` 의 `db_admin_password` 값 보유 (Secret 생성용)
 - OKE 클러스터 도달 가능 (`kubectl get nodes` OK)
 
@@ -49,7 +51,7 @@ pod/db-smoketest created
 ### 3-1. Pod Running 확인
 
 ```bash
-kubectl get pod db-smoketest
+kubectl -n default get pod db-smoketest
 ```
 
 ```bash
@@ -60,7 +62,7 @@ db-smoketest   1/1     Running   0          15s
 ### 3-2. probe 결과 확인
 
 ```bash
-kubectl logs db-smoketest
+kubectl -n default logs db-smoketest
 ```
 
 기대 출력:
@@ -89,7 +91,7 @@ GRANT USAGE ON *.* TO `admin`@`%` ...
 ### 3-3. 대화형 추가 확인 (선택)
 
 ```bash
-kubectl exec -it db-smoketest -- sh -c \
+kubectl -n default exec -it db-smoketest -- sh -c \
   'mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" --ssl-mode=REQUIRED'
 ```
 
@@ -141,7 +143,7 @@ kubectl delete -f kubernetes/test/database/db-smoketest.yaml
 kubectl -n default delete secret db-smoketest-creds
 ```
 
-- Pod 가 `sleep 3600` 으로 살아 있음 — 방치 시 1시간 후 자동 종료. 그래도 명시 삭제 권장
+- Pod 가 `sleep 3600` 으로 살아 있음 — 약 1시간 후 컨테이너가 종료되지만 Pod 객체는 남음. 명시 삭제 필요
 - Secret 도 평문 admin 비밀번호 보유 → 검증 끝나면 즉시 삭제
 
 ### 5-3. 실패 시 점검 표
@@ -151,11 +153,11 @@ kubectl -n default delete secret db-smoketest-creds
 | `Can't connect to MySQL server on '10.0.201.x' (110)` / timeout | sl-db ingress 누락 | `terraform/modules/networking/main.tf` `oci_core_security_list.db` ingress 규칙 확인. workers CIDR (`10.0.102.0/24`) → 3306 허용 여부 |
 | 동일 timeout + sl-db 정상 | workers SL egress 누락 | `oci_core_security_list.workers` egress to `10.0.201.0/28:3306` 확인 |
 | 동일 timeout + SL 둘 다 정상 | **HeatWave Always Free 인스턴스가 장기 미사용으로 inactive 상태** | OCI 콘솔에서 DB System 상태 확인. `INACTIVE` 면 콘솔에서 재기동(Start) → `UPDATING` 거쳐 `ACTIVE` 전환까지 대기 후 재시도 |
-| `Access denied for user 'admin'@'%'` | password 불일치 | `kubectl get secret db-smoketest-creds -o jsonpath='{.data.password}' \| base64 -d` 로 저장값 확인 (디버그 후 즉시 종료) |
+| `Access denied for user 'admin'@'%'` | password 불일치 | `kubectl -n default get secret db-smoketest-creds -o jsonpath='{.data.password}' \| base64 -d` 로 저장값 확인 (디버그 후 즉시 종료) |
 | `SSL connection error: protocol version mismatch` | client TLS 버전이 server 미지원 | `--tls-version=TLSv1.2,TLSv1.3` 명시 |
-| `ERROR 2003 ... Unknown MySQL server host` | DNS 가 IP literal 을 호스트로 해석 시도 (드물게) | `<heatwave-private-ip>` placeholder 가 sed 치환 안 됨. `kubectl describe pod db-smoketest` env 확인 |
-| `ImagePullBackOff` on `mysql:8.0` | OKE worker egress 막힘 / containerd config | `kubectl describe pod db-smoketest` Events. nat gateway / image registry 도달성 확인 |
-| `CreateContainerConfigError` | Secret 미생성 또는 key 이름 불일치 | `kubectl get secret db-smoketest-creds` + key 가 `username`/`password` 인지 |
+| `ERROR 2003 ... Unknown MySQL server host` | DNS 가 IP literal 을 호스트로 해석 시도 (드물게) | `<heatwave-private-ip>` placeholder 가 sed 치환 안 됨. `kubectl -n default describe pod db-smoketest` env 확인 |
+| `ImagePullBackOff` on `mysql:8.0` | OKE worker egress 막힘 / containerd config | `kubectl -n default describe pod db-smoketest` Events. nat gateway / image registry 도달성 확인 |
+| `CreateContainerConfigError` | Secret 미생성 또는 key 이름 불일치 | `kubectl -n default get secret db-smoketest-creds` + key 가 `username`/`password` 인지 |
 | `Pod 가 Running 되는데 mysql 명령 exit=2` | `command` override 가 적용 안 됨 (옛 manifest cache 등) | `kubectl delete -f ...` 후 재배포 |
 
 ### 5-4. 잔여 추적

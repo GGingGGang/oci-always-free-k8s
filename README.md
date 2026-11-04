@@ -2,7 +2,7 @@
 
 OCI의 Always Free 혜택을 활용하도록 설계한 Kubernetes 플랫폼. Terraform으로 OKE와 네트워크·데이터베이스를 구성하고, Argo CD와 Jenkins로 플랫폼 및 애플리케이션 배포를 관리한다. 개발자가 서비스 개발에 집중할 수 있는 환경을 만드는 것이 목표다.
 
-현재 Terraform은 **OKE Basic + ARM 워커 2개, 합계 4 OCPU / 24 GB**를 선언한다. 이 수치는 저장소의 구성값이며 현재 테넌트의 무료 한도나 실제 청구 금액을 뜻하지 않는다. 비용 확인 기준은 아래에 정리했다.
+현재 Terraform은 **OKE Basic + ARM 워커 2개, 합계 4 OCPU / 24 GB**를 선언한다. 이 프로젝트의 PAYG 계정에는 4 OCPU / 24 GB 무료 조건이 적용된다. 다른 계정에는 해당 계정의 조건이 적용된다.
 
 문서 기준일: **2026-09-28**. 아래 구성은 저장소의 Terraform·매니페스트를 기준으로 하며, 실행 중인 클러스터의 상태는 검증 명령으로 별도 확인한다.
 
@@ -54,7 +54,6 @@ flowchart TB
         Apps --> DB["HeatWave MySQL · private DB subnet"]
         Workers --> NAT[NAT Gateway]
         Workers --> SGW[Service Gateway]
-        DB --> SGW
     end
     Internet --> IGW
     Admin --> API
@@ -62,7 +61,7 @@ flowchart TB
     SGW --> Services[OCI Services]
 ```
 
-일반 서비스 요청은 NLB에서 워커의 Istio Gateway로 전달된다. Kubernetes API endpoint는 클러스터 관리 경로이며 서비스 요청의 중계 지점이 아니다. 워커의 인터넷 egress는 NAT Gateway, OCI 서비스 접근은 Service Gateway를 사용한다. 워커와 DB 간 통신은 VCN 내부 경로다.
+일반 서비스 요청은 NLB에서 워커의 Istio Gateway로 전달된다. Kubernetes API endpoint는 클러스터 관리 경로이며 서비스 요청의 중계 지점이 아니다. 워커의 인터넷 egress는 NAT Gateway, OCI 서비스 접근은 Service Gateway를 사용한다. 워커와 DB 간 통신은 VCN 내부 경로다. DB에는 Service Gateway route가 있지만 현재 egress 규칙만으로 OCI 서비스 접근이 보장되지는 않는다. Security List와 NSG 허용 규칙은 합집합이므로 한쪽의 넓은 허용을 다른 쪽이 제한하지 않는다. 현재 NLB 설정만으로 원본 IP 보존은 보장되지 않는다.
 
 | 서브넷 | CIDR | 유형 | 용도 |
 | --- | --- | --- | --- |
@@ -71,7 +70,7 @@ flowchart TB
 | `subnet-workers` | `10.0.102.0/24` | Private | ARM 워커 노드 |
 | `subnet-db` | `10.0.201.0/28` | Private | HeatWave MySQL |
 
-공개 경로는 서비스의 `api.ggang.cloud/v1/auth`, `api.ggang.cloud/v1/core`, `www.ggang.cloud`와 Jenkins의 `ci-hook.ggang.cloud/github-webhook/`이다. 서비스 HTTPRoute는 `k8s-gitops`가, Jenkins webhook HTTPRoute는 이 저장소가 관리한다. Argo CD·Jenkins 관리 UI·Grafana의 public HTTPRoute는 주석 처리되어 있으며 tailnet 또는 port-forward로 접근한다.
+공개 경로는 서비스의 `api.ggang.cloud/v1/auth`, `api.ggang.cloud/v1/core`, `www.ggang.cloud`와 Jenkins의 `ci-hook.ggang.cloud/github-webhook/`이다. 서비스 HTTPRoute는 `k8s-gitops`가, Jenkins webhook HTTPRoute는 이 저장소가 관리한다. Argo CD와 Jenkins 관리 UI의 public HTTPRoute는 주석 처리되어 있다. Tailscale 경로는 연결 검증이 필요하며 port-forward도 사용할 수 있다. Grafana는 비활성화되어 있다. 공개 Jenkins webhook의 HMAC 검증 설정은 체크인되어 있지 않다.
 
 ## 배포 흐름
 
@@ -87,23 +86,23 @@ platform-root (이 저장소의 argocd/apps/*.yaml)
        └─ apps-root → auth / batch / core / notify / web
 ```
 
-`platform-root`, `platform-project`, `app-layer-root`에는 `automated: {}`가 설정되어 있다. Jenkins·Prometheus 등 개별 플랫폼 Application에는 자동 sync가 설정되어 있지 않으므로 루트 동기화와 실제 플랫폼 배포를 구별해야 한다. 서비스 Application은 `k8s-gitops`의 자동 sync 정책을 따른다. 상세 설정은 [Argo CD Application 디렉터리](./kubernetes/platform/argocd/apps)를 확인한다.
+`platform-root`, `platform-project`, `app-layer-root`에는 `automated: {}`가 설정되어 있다. Jenkins·Prometheus 등 개별 플랫폼 Application에는 자동 sync가 설정되어 있지 않으므로 루트 동기화와 실제 플랫폼 배포를 구별해야 한다. 서비스 Application은 `k8s-gitops`의 자동 sync·prune·selfHeal 정책을 따른다. 부모 sync-wave만으로 수동 자식 워크로드의 준비가 보장되지는 않는다. 상세 설정은 [Argo CD Application 디렉터리](./kubernetes/platform/argocd/apps)를 확인한다.
 
 ## 리소스와 비용 확인
 
 | 리소스 | 현재 선언값 | 확인할 점 |
 | --- | --- | --- |
-| A1.Flex | 노드당 2 OCPU / 12 GB, 2노드 | 총 4 OCPU / 24 GB의 테넌트별 무료 적용 범위 |
+| A1.Flex | 노드당 2 OCPU / 12 GB, 2노드 | 프로젝트 PAYG 계정의 4 OCPU / 24 GB 무료 조건 |
 | OKE | `BASIC_CLUSTER`, managed node pool | 워커·스토리지·네트워크 사용량은 별도로 확인 |
 | HeatWave | `MySQL.Free`, 데이터 50 GB | 홈 리전 가용성과 무료 적용 여부 |
 | NLB | Istio Gateway가 생성하도록 지정 | 실제 생성 개수와 네트워크 사용량 |
-| Block Volume | Prometheus 50 Gi + NATS/OpenBao 공유 50 Gi PVC | 워커 부트 볼륨과 합산 |
+| Block Volume | Prometheus/Loki/Tempo 공유 50 Gi + NATS/OpenBao 공유 50 Gi PVC | 워커 부트 볼륨과 합산 |
 | Object Storage | `bao-snapshots`, 별도 준비하는 `tfstate` 버킷 | 객체 크기·버전·요청 수 |
 | KMS | Standard Vault, software-protected AES 키 | OpenBao auto-unseal용 |
 
 Oracle Cloud Free Tier는 Always Free 서비스와 기간 한정 Free Trial을 포함한다. PAYG 계정에서도 무료 제공량을 넘는 사용은 과금 대상이다. [Oracle Free Tier 안내](https://www.oracle.com/cloud/free/)
 
-2026-09-28 조회한 [Always Free 공식 문서](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)는 A1 무료량을 월 **1,500 OCPU-hour / 9,000 GB-hour**로 안내하고, Always Free tenancy 기준 **2 OCPU / 12 GB**로 설명한다. 이 저장소의 4 OCPU / 24 GB 설정을 그대로 무료라고 단정하지 않는다. 적용 전 해당 PAYG 테넌트의 무료 혜택·사용량·Cost Analysis를 확인한다. 이 README는 실제 청구 내역을 검증한 기록이 아니다.
+2026-11-04에 다시 확인한 [Always Free 공식 문서](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)는 A1 무료량을 월 **1,500 OCPU-hour / 9,000 GB-hour**로 안내하고, Always Free tenancy 기준 **2 OCPU / 12 GB**로 설명한다. 이 프로젝트의 PAYG 계정에는 별도로 4 OCPU / 24 GB 무료 조건이 적용되며, 저장소의 워커 구성은 그 조건에 맞춘다.
 
 기존 무료 리소스 카탈로그는 [한국어](./docs/summary-kr.md)와 [영어](./docs/summary.md)에 있다. 비용과 한도는 조회 시점의 공식 문서 및 테넌트 적용 조건을 우선한다. Basic과 Enhanced 기능 차이는 [Oracle 비교 문서](https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contengcomparingenhancedwithbasicclusters_topic.htm)를 참고한다. 이 프로젝트는 `BASIC_CLUSTER`와 `FLANNEL_OVERLAY`를 명시적으로 선택한다.
 
@@ -146,9 +145,9 @@ kubectl get nodes -o wide
 
 기반 설치 순서는 `namespaces → Gateway API CRD → Istio 코어 → external-dns → cert-manager → Istio Gateway`다. 인증서 Secret이 준비된 뒤 HTTPS Gateway를 적용한다. metrics-server와 Tailscale 설치는 [infra 안내](./kubernetes/infra/README.md)를 따른다.
 
-플랫폼 설치는 [platform 안내](./kubernetes/platform/README.md)와 컴포넌트별 README를 따른다. GitHub/GHCR 인증, Cloudflare 토큰, cosign 키, Grafana 자격증명, Discord webhook 등의 Secret을 먼저 준비한다. OpenBao의 KMS placeholder는 Terraform output으로 채워야 한다.
+플랫폼 설치는 [platform 안내](./kubernetes/platform/README.md)와 컴포넌트별 README를 따른다. GitHub/GHCR 인증, Cloudflare 토큰, cosign 키, Discord webhook 등 필요한 Secret을 먼저 준비한다. Grafana 자격증명은 Grafana 재활성화 시 필요하다. OpenBao의 KMS placeholder는 Terraform output으로 채워야 한다.
 
-Argo CD 초기 설치와 self-managed 구성을 완료한 뒤 `platform-root`가 플랫폼 Application을, `app-layer-root`가 `k8s-gitops`의 진입점을 관리한다. OpenBao와 Tailscale은 현재 플랫폼 Application 목록에 없으므로 별도 설치 절차를 따른다.
+Argo CD 초기 설치와 self-managed 구성을 완료한 뒤 `platform-root`가 플랫폼 Application을, `app-layer-root`가 `k8s-gitops`의 진입점을 관리한다. Gateway API CRD, OpenBao와 Tailscale은 별도 관리한다. OpenBao는 NATS Pod와 PVC 준비 후 수동 저장 경로 준비 Job과 Helm 설치가 필요하다. 관측 스택은 CRD와 공유 PVC 경로 준비 순서에 따라 수동 sync한다.
 
 ### 서비스 온보딩
 
@@ -168,7 +167,7 @@ kubectl get pvc -A
 kubectl get clusterpolicy verify-svc-image-signature
 ```
 
-Prometheus와 NATS는 각각 50 Gi PVC를 요청한다. OpenBao는 `data`에서 NATS PVC의 별도 subPath를 사용하며 두 Pod는 같은 노드에 배치한다. 공유 PV는 Retain이고, Redis와 Jenkins는 비영속 구성이므로 각 컴포넌트의 복구 절차를 함께 확인한다. OpenBao의 KMS auto-unseal은 데이터 영속화나 백업을 대신하지 않는다.
+Prometheus와 NATS는 각각 50 Gi PVC를 요청한다. OpenBao는 `data`에서 NATS PVC의 별도 subPath를 사용하며 두 Pod는 같은 노드에 배치한다. Prometheus·Loki·Tempo도 단일 50 Gi PVC를 공유하며 subPath별 용량 격리는 없다. monitoring PSA baseline은 node-exporter 기본 hostPath·hostPID와 충돌하므로 예외가 없으면 Pod가 거부될 수 있다. 공유 PV는 Retain이고 Redis와 Jenkins는 비영속 구성이다. Redis와 NATS는 ClusterIP에서 인증 없이 노출되며 ambient 라벨만으로 접근 제한을 보장하지 않는다. Jenkins controller는 cicd Secret을 읽고 cicd/build Pod를 관리할 수 있으므로 각 컴포넌트의 보안·복구 절차를 함께 확인한다. OpenBao의 KMS auto-unseal은 데이터 영속화나 백업을 대신하지 않는다.
 
 ## 디렉터리와 문서
 

@@ -10,18 +10,20 @@
 - `istio-system` 네임스페이스 존재 (`../namespaces/namespaces.yaml`)
 - cert-manager Certificate `istio-system/public-wildcard` Ready=True (`../cert-manager/`)
 - Helm 3.6+ (또는 4)
-- 권장 버전: **Istio 1.29.x** (`~1.29.0` SemVer 범위)
+- Argo CD 고정 버전: **Istio 1.29.3** (`../../platform/argocd/apps/`)
 
 ## 2. 설치
+
+이 디렉터리(`kubernetes/infra/istio`)에서 실행한다. 수동 설치는 부트스트랩 절차이며 Argo CD Application도 같은 values와 버전을 사용한다.
 
 ```bash
 helm repo add istio https://istio-release.storage.googleapis.com/charts
 helm repo update
 
-helm install istio-base istio/base    -n istio-system --version "~1.29.0" -f base.values.yaml    --wait
-helm install istiod     istio/istiod  -n istio-system --version "~1.29.0" -f istiod.values.yaml  --wait
-helm install istio-cni  istio/cni     -n istio-system --version "~1.29.0" -f cni.values.yaml     --wait
-helm install ztunnel    istio/ztunnel -n istio-system --version "~1.29.0" -f ztunnel.values.yaml --wait
+helm install istio-base istio/base    -n istio-system --version "1.29.3" -f base.values.yaml    --wait
+helm install istiod     istio/istiod  -n istio-system --version "1.29.3" -f istiod.values.yaml  --wait
+helm install istio-cni  istio/cni     -n istio-system --version "1.29.3" -f cni.values.yaml     --wait
+helm install ztunnel    istio/ztunnel -n istio-system --version "1.29.3" -f ztunnel.values.yaml --wait
 
 kubectl apply -f gateway.yaml
 kubectl apply -f http-redirect.yaml
@@ -65,13 +67,13 @@ curl -vIk "https://ggang.cloud" --resolve "ggang.cloud:443:${GATEWAY_IP}"
 | Pod restart | 주입 시 강제 | 불필요 |
 | GA | 오래됨 | 2024-11 (1.24) |
 
-OCI Always Free 24GB RAM, 앱 파드 10개 가정 시 sidecar는 400-500MB 추가. ambient는 노드 2개 × 80MB = 160MB. L7 필요 시점에만 waypoint 추가.
+이 프로젝트 PAYG 계정의 무료 24GB RAM 구성, 앱 파드 10개 가정 시 sidecar는 400-500MB 추가. ambient는 노드 2개 × 80MB = 160MB. L7 필요 시점에만 waypoint 추가.
 
 ### Istio Gateway Helm chart 비채택
 
 Helm으로 깔리는 4개: `base`, `istiod`, `cni`, `ztunnel`.
 
-`istio/gateway` chart는 깔지 않는다. 외부 트래픽을 Gateway API 표준 리소스(`Gateway`, `HTTPRoute`)로 처리하기로 결정. `istio/gateway` chart는 구식 Istio Gateway CR용 envoy를 띄우는 chart라 본 결정과 모순.
+`istio/gateway` chart는 깔지 않는다. 외부 트래픽은 Gateway API 표준 리소스(`Gateway`, `HTTPRoute`)와 Istio 자동 프로비저닝으로 처리한다. 게이트웨이 데이터플레인을 수동 관리할 때는 `istio/gateway` chart도 사용할 수 있다.
 
 Gateway API `Gateway` 리소스를 선언하면 Istio가 reconcile하면서 envoy Deployment + Service를 자동 프로비저닝한다. NLB annotation은 `spec.infrastructure.annotations` 필드로 전달.
 
@@ -93,9 +95,9 @@ annotation은 `gateway.yaml` 참조. AWS NLB / GCP TCP LB와 동일한 권장 �
 
 Helm only. istioctl로 설치 시 GitOps drift 추적 불가.
 
-### profile=ambient 사후 변경 불가
+### 데이터플레인 전환
 
-ambient → sidecar 전환은 사실상 재설치. 결정 본 단계에서 고정.
+ambient와 sidecar는 공존할 수 있지만 전환 시 라벨, 주입 설정과 정책을 단계적으로 변경하고 트래픽을 검증해야 한다. 참조: https://istio.io/latest/docs/ambient/migrate/
 
 ### Listener — HTTPS는 apex/wildcard 분리, HTTP는 catch-all
 
@@ -117,7 +119,7 @@ HTTP listener는 hostname 박지 않음. HTTP는 redirect 전용이라 listener�
 
 ### TLS mode: Terminate
 
-NLB가 TCP passthrough이므로 TLS 종료는 Gateway envoy가 책임. mTLS passthrough (`mode: Passthrough`) 비채택 — Gateway가 SNI만 보고 백엔드로 그대로 전달하는 모드라 L7 라우팅/policy 불가. 클러스터 내부 mTLS는 Istio Ambient ztunnel이 처리하되 **per-namespace opt-in** — `istio.io/dataplane-mode: ambient` 라벨이 붙은 NS(현재 `app`/`cicd`/`vault`/`data`/`core`/`batch`/`auth`, `namespaces.yaml` 참조)에 한해 적용되고, 라벨 없는 NS의 내부 hop은 평문 그대로다.
+NLB가 TCP passthrough이므로 TLS 종료는 Gateway envoy가 책임. mTLS passthrough (`mode: Passthrough`) 비채택 — Gateway가 SNI만 보고 백엔드로 그대로 전달하는 모드라 L7 라우팅/policy 불가. 클러스터 내부 mTLS는 Istio Ambient ztunnel이 처리하되 **per-namespace opt-in** — `istio.io/dataplane-mode: ambient` 라벨이 붙은 NS(현재 `app`/`cicd`/`vault`/`data`/`core`/`batch`/`auth`/`notify`/`web`, `../namespaces/namespaces.yaml` 참조)의 워크로드가 캡처 대상이다. mesh에 참여한 워크로드 간 TCP 트래픽은 mTLS로 보호되지만 라벨만으로 모든 클라이언트 경로의 보호를 보장하지 않는다.
 
 ## 5. 주의 사항
 
@@ -143,8 +145,8 @@ ambient의 ztunnel + istio-cni는 host network + privileged container 필요. `i
 `*.values.yaml`은 chart default 위에 *덮어쓰는 override만* 명시. 전체 schema 확인:
 
 ```bash
-helm show values istio/base    --version "~1.29.0"
-helm show values istio/istiod  --version "~1.29.0"
-helm show values istio/cni     --version "~1.29.0"
-helm show values istio/ztunnel --version "~1.29.0"
+helm show values istio/base    --version "1.29.3"
+helm show values istio/istiod  --version "1.29.3"
+helm show values istio/cni     --version "1.29.3"
+helm show values istio/ztunnel --version "1.29.3"
 ```

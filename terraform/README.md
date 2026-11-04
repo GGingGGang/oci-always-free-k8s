@@ -1,6 +1,6 @@
 # terraform
 
-OCI 인프라 프로비저닝. VCN, OKE Basic Cluster, ARM Always Free 노드 풀, HeatWave MySQL Free, KMS (OpenBao auto-unseal), IAM (NSG / Dynamic Group / Policy), Object Storage.
+OCI 인프라 프로비저닝. VCN, OKE Basic Cluster, ARM A1.Flex 노드 풀, HeatWave MySQL Free, KMS (OpenBao auto-unseal), IAM (NSG / Dynamic Group / Policy), Object Storage.
 
 ## 1. 전제 조건
 
@@ -12,6 +12,8 @@ OCI 인프라 프로비저닝. VCN, OKE Basic Cluster, ARM Always Free 노드 �
 
 ## 2. 설치
 
+아래 명령은 `terraform/` 디렉터리에서 실행한다. OCI CLI와 백엔드에 사용할 `~/.oci/config`의 `DEFAULT` 프로필을 설정하고 버킷 생성 및 state 객체 읽기/쓰기 권한을 준비한다. Provider의 `terraform.tfvars` 인증과 백엔드 인증은 별개다.
+
 ### 2-1. 인증 정보 작성
 
 ```bash
@@ -20,7 +22,7 @@ cp terraform.tfvars.example terraform.tfvars
 # compartment_ocid, ssh_authorized_keys, db_admin_password, allowed_cidr 채움
 ```
 
-`private_key_path`는 `./secrets/oci-api-key.pem` 권장 (`secrets/`는 `.gitignore` 적용).
+`private_key_path`는 `./secrets/oci-api-key.pem` 권장 (`*.pem`은 `.gitignore` 적용).
 
 ### 2-2. remote state 백엔드
 
@@ -70,33 +72,33 @@ kubectl get nodes -o wide
 kubectl get svc -A
 ```
 
-노드 2개가 `Ready` 상태로 보이면 정상. `terraform output`의 `heatwave_ip`/`heatwave_port`로 MySQL 접속 가능 (워커 노드 또는 Bastion 경유).
+노드 2개가 `Ready` 상태로 보이는지 확인한다. `terraform output`의 `heatwave_ip`/`heatwave_port`는 private DB endpoint이며 현재 DB ingress는 워커 서브넷의 TCP 3306만 허용한다. Bastion 등 다른 경로에는 별도 네트워크 규칙이 필요하다.
 
 ## 4. 결정
 
 ### Basic Cluster
 
-Enhanced ($0.10/h) 대신 Basic 선택. 컨트롤 플레인 자체 무료, 워커는 A1.Flex Always Free 쿼터 사용 → **클러스터 전체 0원**. 단 Virtual Nodes / OKE Add-ons / 컨트롤 플레인 SLA 미지원.
+Enhanced ($0.10/h) 대신 Basic 선택. 컨트롤 플레인은 무료이며 워커는 A1.Flex를 사용한다. 부트/블록 볼륨, Object Storage, 네트워크 등의 사용량과 기존 tenancy 사용량에 따라 비용이 발생할 수 있다. Virtual Nodes와 컨트롤 플레인 SLA는 미지원이며, 필수 OKE add-on의 사용자 지정은 유지가 보장되지 않는다.
 
 ### Flannel Overlay CNI
 
-`cluster_pod_network_options.cni_type = "FLANNEL_OVERLAY"`. Basic Cluster는 VCN-Native CNI 미지원이라 Flannel 강제. Pod CIDR `10.244.0.0/16`, Service CIDR `10.96.0.0/16`.
+`cluster_pod_network_options.cni_type = "FLANNEL_OVERLAY"`. 이 구성은 Flannel을 사용한다. Pod CIDR `10.244.0.0/16`, Service CIDR `10.96.0.0/16`.
 
 ### ARM A1.Flex × 2 노드
 
-`VM.Standard.A1.Flex`, 노드당 2 OCPU / 12 GB. 2노드 = 4 OCPU / 24 GB → Always Free 한도 정확히 일치. AMD VM (1/8 OCPU, 1 GB) 대비 ARM이 24배 더 큰 메모리 → k8s 워커 최적.
+`VM.Standard.A1.Flex`, 노드당 2 OCPU / 12 GB, 2노드 합계 4 OCPU / 24 GB를 선언한다. [Oracle Always Free 안내](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)는 홈 리전의 A1 VM에 대해 모든 tenancy에 월 1,500 OCPU-hour / 9,000 GB-hour를 제공하며 Always Free tenancy에서는 2 OCPU / 12 GB에 해당한다고 설명한다. 이 프로젝트의 PAYG 계정에는 4 OCPU / 24 GB 무료 조건이 적용되므로 위 워커 구성은 그 조건에 맞춘다.
 
 ### 이미지 동적 조회 (regex)
 
-`Oracle-Linux-8\.\d+-aarch64-.*` 정규식으로 리전별 최신 ARM 이미지 조회. region마다 OCID가 달라 하드코딩 불가. `sort_by=TIMECREATED DESC`로 가장 최근 빌드 선택.
+`Oracle-Linux-8\.\d+-aarch64-.*` 정규식으로 리전별 최신 ARM 이미지 조회. `sort_by=TIMECREATED DESC`로 조건에 맞는 가장 최근 빌드를 선택한다. 이 필터는 Kubernetes 버전이나 OKE 지원 이미지 목록을 확인하지 않으므로 적용 전 `oci ce node-pool-options get --node-pool-option-id all`로 호환성을 확인한다.
 
 ### NSG 기반 admin 접근 제한
 
-`oci_core_network_security_group.public_access` — `allowed_cidr` 에서 TCP 6443(OKE API) / 443 / 80 만 허용 (포트 명시, `protocol all` 비채택 — 허용 IP 침해 시에도 도달 포트 최소화). 현재 OKE API endpoint(`endpoint_nsg_ids`)에만 부착 — LoadBalancer(Gateway API가 프로비전하는 NLB)는 `kubernetes/infra/istio/gateway.yaml`의 `infrastructure.annotations`에 NSG 지정이 없어 미부착 상태. Security List가 `0.0.0.0/0` 허용해도 API endpoint는 NSG가 한 번 더 거름. CIDR 변경은 `terraform apply` 한 번으로 동기.
+`oci_core_network_security_group.public_access` — `allowed_cidr` 에서 TCP 6443(OKE API) / 443 / 80 만 허용 (포트 명시, `protocol all` 비채택 — 허용 IP 침해 시에도 도달 포트 최소화). 현재 OKE API endpoint(`endpoint_nsg_ids`)에만 부착 — LoadBalancer(Gateway API가 프로비전하는 NLB)는 `kubernetes/infra/istio/gateway.yaml`의 `infrastructure.annotations`에 NSG 지정이 없어 미부착 상태. Security List와 NSG의 허용 규칙은 합집합이므로 Security List가 `0.0.0.0/0`을 허용하면 NSG가 이를 차단하지 못한다. 현재 API subnet Security List의 6443 ingress는 워커 CIDR만 허용한다. CIDR 변경은 `terraform apply` 한 번으로 동기.
 
 ### KMS — OpenBao auto-unseal 키
 
-`kms` 모듈: Standard Vault(`DEFAULT`) + AES-256 키 1개. `protection_mode = "SOFTWARE"` — software-protected 키는 과금 없음 (HSM 키 버전만 과금) → Always Free 0원 유지. FIPS HSM 경계 포기 트레이드오프.
+`kms` 모듈: Standard Vault(`DEFAULT`) + AES-256 키 1개. `protection_mode = "SOFTWARE"` — software-protected 키는 과금 없음 (HSM 키 버전에도 무료 한도 적용). FIPS HSM 경계 포기 트레이드오프.
 
 ### Dynamic Group + Policy — instance principal
 
@@ -122,11 +124,11 @@ all_services = [
 | subnet-workers | 10.0.102.0/24 | Private | Worker nodes |
 | subnet-db | 10.0.201.0/28 | Private | HeatWave MySQL |
 
-DB가 Service Gateway 경유 OCI 내부 서비스(패치/백업)에 접근 — 인터넷 비노출. 워커는 NAT Gateway로 image pull / OS 업데이트.
+DB route table은 Service Gateway 경로를 갖지만 DB Security List의 egress는 VCN CIDR의 TCP만 허용하므로 OCI 서비스 접근을 보장하지 않는다. DB는 인터넷에 노출되지 않는다. 워커는 NAT Gateway로 image pull / OS 업데이트.
 
 ### HeatWave MySQL.Free
 
-`MySQL.Free` shape, 50GB. AlwaysFree 1 인스턴스 한도. `deletion_policy.is_delete_protected = false` — terraform destroy 시 함께 제거. 운영 데이터 유의.
+`MySQL.Free` shape, 50 GiB. Always Free는 tenancy의 홈 리전에서 DB 시스템 1개로 제한된다. `deletion_policy.is_delete_protected = false` — terraform destroy 시 함께 제거. 운영 데이터 유의.
 
 ### terraform 모듈 분리
 
@@ -163,7 +165,7 @@ default `v1.34.2`가 리전에서 미지원일 수 있음. 적용 전 `oci ce cl
 
 ### db_admin_password rotation
 
-`sensitive = true`로 plan/apply 출력에서 마스킹. tfvars 자체는 `.gitignore` 적용. 회전은 OCI 콘솔에서 직접 변경 후 `terraform refresh` 또는 변수만 갱신해서 in-place update.
+`sensitive = true`로 plan/apply 출력에서 마스킹. tfvars 자체는 `.gitignore` 적용. 회전 시 `terraform.tfvars`의 값을 갱신하고 `terraform plan`으로 변경을 확인한 뒤 적용한다. 콘솔에서만 변경하면 선언된 값과 불일치할 수 있다.
 
 ### secrets/ 폴더
 

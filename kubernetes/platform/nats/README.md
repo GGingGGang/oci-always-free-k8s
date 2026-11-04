@@ -19,7 +19,7 @@ MSA 이벤트 백본. 단일 서버 + JetStream file store — at-least-once, du
 
 ## 2. 설치
 
-GitOps — ArgoCD `nats` Application(`apps/nats.yaml`, wave 6). 차트는 helm repo, values 는 본 레포에서 `$values` 로 참조하는 2-source 구성. 부트스트랩/수동:
+GitOps — ArgoCD `nats` Application(`../argocd/apps/nats.yaml`, wave 6). 차트는 helm repo, values 는 본 레포에서 `$values` 로 참조하는 2-source 구성이다. 자동 sync는 설정하지 않았다. 수동 설치는 이 디렉터리에서 실행한다:
 
 ```bash
 helm install nats nats/nats -n data --version 2.14.2 -f values.yaml --wait
@@ -87,7 +87,7 @@ stream/consumer 생성은 이 레포가 아니라 **앱 쪽 책임**(기동 시 
 
 ### restricted-compliant securityContext
 
-NS 는 baseline 이지만 Pod 는 restricted 수준. 공식 nats 이미지에 `USER` 지시자가 없어 기본 root 로 뜨므로 `runAsNonRoot`(1000) 를 명시해야 한다. PVC 는 `fsGroup: 1000` 으로 쓰기 허용, `readOnlyRootFilesystem` — 쓰기 경로는 `/data`(PVC) 와 `/var/run/nats`(emptyDir) 뿐.
+NS 는 baseline 이지만 Pod 는 restricted 수준. 공식 nats 이미지에 `USER` 지시자가 없어 기본 root 로 뜨므로 `runAsNonRoot`(1000) 를 명시해야 한다. PVC 는 `fsGroup: 1000` 으로 쓰기 허용, `readOnlyRootFilesystem` — JetStream PVC는 `/data/jetstream`에 마운트하고 `/var/run/nats`는 emptyDir로 사용한다.
 
 ### promExporter + PodMonitor
 
@@ -99,9 +99,9 @@ nats-box 는 상주시키지 않고 필요할 때 일회성 파드로(§3). PDB 
 
 ## 6. 주의 사항
 
-### 인증 미설정 — in-mesh 한정
+### 인증 미설정
 
-계정/사용자 없음. ClusterIP 라 외부 노출 0, ambient mesh 내부 접근만. 멀티테넌트로 확장 시 account 분리(`app` / `cicd`) + nkey/creds(OpenBao 발급) + AuthorizationPolicy 호출자 제한.
+계정/사용자 인증이 설정되지 않았다. ClusterIP는 클러스터 내부 주소이며 ambient 등록만으로 호출자가 제한되지는 않는다. 클러스터 내 접근과 별도 외부 노출 경로를 점검해야 한다. 멀티테넌트로 확장 시 account 분리(`app` / `cicd`) + nkey/creds(OpenBao 발급) + AuthorizationPolicy 호출자 제한을 검토한다.
 
 ### stream max_bytes 미설정 시 캡이 서버 단위
 

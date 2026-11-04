@@ -2,9 +2,9 @@
 
 OKE 클러스터 위에서 동작하는 Kubernetes 매니페스트.
 
-각 컴포넌트 폴더에 매니페스트(`.yaml`) + helm values + README. 모든 README는 5섹션 표준 (전제 조건 / 설치 / 검증 / 결정 / 주의 사항).
+각 컴포넌트 폴더에 매니페스트(`.yaml`), helm values 및 운영 안내를 둔다.
 
-본 트리의 yaml 은 GitHub Actions `yaml-lint` 워크플로가 push/PR 마다 검사한다 — 규칙은 레포 루트 `.yamllint.yaml` (`document-start`/`line-length` 만 완화, 그 외 기본 규칙 전부 적용, `--strict` 차단).
+GitHub Actions `yaml-lint`는 관련 경로 변경이 포함된 main push와 PR에서 본 트리의 YAML을 검사한다. 규칙은 레포 루트 `.yamllint.yaml`이며 `--strict`를 사용한다.
 
 ## 디렉토리
 
@@ -12,12 +12,12 @@ OKE 클러스터 위에서 동작하는 Kubernetes 매니페스트.
 kubernetes/
 ├── infra/                # 클러스터 부트스트랩 인프라
 │   ├── namespaces/       # 워크로드·플랫폼 네임스페이스와 PSA/ambient/서명검증 라벨
-│   ├── gateway-api/      # Gateway API CRD
+│   ├── gateway-api/      # Gateway API v1.5.0 CRD 수동 설치
 │   ├── istio/            # Ambient mesh + Gateway/HTTPRoute
 │   ├── external-dns/     # HTTPRoute hostnames → Cloudflare DNS
 │   ├── cert-manager/     # LE DNS-01 + 와일드카드 Certificate
 │   ├── metrics-server/   # metrics.k8s.io (kubectl top / HPA)
-│   ├── tailscale/        # subnet router — 관리 플레인 사설화 (tailnet)
+│   ├── tailscale/        # subnet router — tailnet 사설 접근 경로 (연결 검증 필요)
 │   ├── rbac/             # RBAC 설계 문서 (실 YAML은 각 컴포넌트 폴더 동거)
 │   └── README.md         # 전체 그림 + 설치 순서
 ├── platform/             # CI/CD · 관측 · 보안 등 플랫폼 컴포넌트
@@ -30,7 +30,7 @@ kubernetes/
 │   │   └── alloy/        # 앱 namespace 6개의 API 로그 수집 → Loki
 │   ├── redis/            # MSA 캐시 (ephemeral, cache-aside, data NS)
 │   ├── nats/             # MSA 이벤트 백본 (JetStream file store, data NS)
-│   └── kyverno/          # 정책 엔진 — 이미지 서명 admission 검증 (kyverno NS)
+│   └── kyverno/          # 정책 엔진 — 지정 namespace와 이미지의 서명 admission 검증
 └── test/                 # 일회성 검증 자산
     ├── networking/       # NLB smoke test
     ├── storage/          # Block Volume CSI smoke test
@@ -41,7 +41,7 @@ kubernetes/
 
 ## 적용 모델
 
-helm install + `kubectl apply` 수동(멱등) 흐름이 cold-start / DR 복구 자산으로 유지되며, 이와 별개로 본 레포(인프라)는 self-managed Application + 기존 helm release adopt 구조로 **전환 완료**(`platform/argocd/apps/*.yaml`) — 단 adopt 단계는 수동 sync + prune off, selfHeal/prune 활성은 하드닝 turn. 앱 sync 는 별도 GitOps 레포([`k8s-gitops`](https://github.com/GGingGGang/k8s-gitops)) 대상 — config vs source code 분리 원칙 유지. 상세는 `platform/argocd/README.md` §6.
+수동 Helm 설치와 `kubectl apply` 절차는 부트스트랩과 복구에 사용한다. `platform-root`, `platform-project`, `app-layer-root`는 자동 sync하지만 대부분의 플랫폼 워크로드 Application은 수동 sync한다. Gateway API CRD, OpenBao, Tailscale은 별도 관리한다. 별도 GitOps 레포([`k8s-gitops`](https://github.com/GGingGGang/k8s-gitops))의 앱 root와 서비스 Application은 자동 sync, prune, selfHeal을 사용한다. 상세와 의존 순서는 `platform/argocd/README.md` 참조.
 
 ## 앱 매니페스트 위치
 
@@ -51,9 +51,11 @@ helm install + `kubectl apply` 수동(멱등) 흐름이 cold-start / DR 복구 �
 
 > 결정: deploy 전용 레포 분리 — 매니페스트를 `k8s-gitops/manifests/<svc>` 로 이전. Jenkins 는 앱 main 이 아니라 `k8s-gitops` 에 bump(shared library `deployBump`) → 앱 레포 main 무오염, `k8s-gitops` 는 org folder(`svc-.*`) 밖이라 빌드 루프 없음(`[ci skip]` 불필요). `core`/`batch`/`auth` 이전 완료.
 
-관측 설정은 Grafana를 비활성화하고 [Loki](platform/monitoring/loki/README.md)의 수동 GitOps 설치를 제공한다. Loki는 기존 Prometheus PVC의 별도 subPath를 사용하므로 노드 라벨·경로 준비 후 KPS와 Loki 순서로 동기화한다. 기존 Grafana 정리는 [KPS 안내](platform/monitoring/kps/README.md)의 선택적 prune 절차를 따른다. [Tempo](platform/monitoring/tempo/README.md)는 기존 PVC의 `tempo/` 경로와 Alloy OTLP 수신을 구성하며 수동 동기화한다.
+관측 설정은 Grafana를 비활성화한다. Prometheus, Loki, Tempo는 50Gi PVC를 공유하며 subPath별 용량 할당량은 없다. 기존 PVC가 연결된 노드에 라벨과 경로를 준비하고 [관측 설치 순서](platform/monitoring/README.md)에 따라 수동 sync한다. `monitoring` PSA baseline은 node-exporter 기본 hostPath와 충돌하므로 예외가 없으면 Pod가 거부될 수 있다.
+
+OpenBao는 NATS의 50Gi RWO PVC를 공유하며 NATS 준비 후 별도 저장 경로 준비 Job과 Helm 설치가 필요하다. Redis와 NATS는 ClusterIP에 인증 없이 노출되며 ambient 라벨만으로 접근 제한을 보장하지 않는다. Jenkins webhook은 공개 route가 선언되어 있으나 체크인된 HMAC 검증 설정은 없다. 자세한 조건은 [platform 안내](platform/README.md)를 따른다.
 
 ## 예정 추가
 
-- `platform/` — argocd, jenkins, openbao, monitoring, 데이터 계층(redis/nats, `data` NS), kyverno(이미지 서명 admission 검증, Enforce) 도입 완료. Loki / [Alloy](platform/monitoring/alloy/README.md) / [Tempo](platform/monitoring/tempo/README.md) 수동 GitOps 설정 제공, 앱 계측 / Grafana 조회 연결 / Kiali 후속
+- `platform/` — Loki / [Alloy](platform/monitoring/alloy/README.md) / [Tempo](platform/monitoring/tempo/README.md) 수동 GitOps 설정 제공, 앱 계측 / Grafana 조회 연결 / Kiali 후속
 - 앱 레이어(app-of-apps)는 전용 GitOps 레포(`k8s-gitops`)로 분리 — `core`/`batch`/`auth` Application + 매니페스트 이전 완료. 후속 east-west 통제(Istio mTLS STRICT + AuthorizationPolicy)

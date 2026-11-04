@@ -2,7 +2,7 @@
 
 메트릭/알림. Prometheus + Alertmanager + node-exporter + kube-state-metrics + prometheus-operator를 운영한다. `values.yaml`은 Grafana 비활성화를 선언하며 rollback을 위한 기존 설정 블록은 보존한다. Alertmanager 는 Discord 웹훅으로 배선됨 (AlertmanagerConfig CR — 절차·구조는 §2).
 
-> 이 변경은 저장소의 준비본이며 아직 배포되지 않았다. `grafana.enabled: false`가 Helm 렌더에서 Grafana 리소스를 제외해도, 이미 클러스터에 있는 Grafana 워크로드는 Argo CD `kps` 앱을 prune 동기화하기 전까지 삭제되지 않는다 (§4).
+> `grafana.enabled: false`가 Helm 렌더에서 Grafana 리소스를 제외해도, 이미 클러스터에 있는 Grafana 워크로드는 Argo CD `kps` 앱을 prune 동기화하기 전까지 삭제되지 않는다 (§4). 실제 배포 상태는 클러스터에서 확인한다.
 
 참조:
 - https://github.com/prometheus-community/helm-charts (chart `prometheus-community/kube-prometheus-stack`)
@@ -12,27 +12,23 @@
 
 - `monitoring` 네임스페이스 + PSA `enforce=baseline` (`../../../infra/namespaces/`)
 - Grafana rollback 시에만 `grafana-admin-fixed` Secret (`monitoring` NS)이 필요하다. 현재 Grafana는 렌더되지 않으므로 이 Secret을 읽지 않는다 (§4).
-- Helm 3.6+
-- 권장 버전: 작성 시점 추론 `~75.0.0` — chart가 app 버전을 추종해 major를 자주 올림. 설치 전 확인:
-  ```bash
-  helm search repo prometheus-community/kube-prometheus-stack --versions | head
-  ```
+- Argo CD `kps` Application은 chart `75.0.0`을 고정한다 (`../../argocd/apps/kps.yaml`).
 
 > `kubectl top` / CPU 기반 HPA 는 이 스택이 아니라 별도 **metrics-server**(`metrics.k8s.io`)가 필요. node-exporter ≠ metrics-server.
 
 ## 2. 설치
 
+저장소 루트에서 Argo CD Application을 등록하고 수동 동기화한다. 최초 설치에서는 CRD가 먼저 필요하므로 `kps`를 먼저 동기화하고 `monitoring-resources`로 AlertmanagerConfig를 적용한 뒤 `kps`를 다시 동기화한다. 첫 `kps` 동기화에서 AlertmanagerConfig가 아직 없어 준비되지 않을 수 있으므로 CRD 설치를 확인한 뒤 계속한다. Discord Secret과 저장소 준비는 아래 절차를 따른다.
+
 ```bash
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm repo update
-
-helm install kps prometheus-community/kube-prometheus-stack \
-  -n monitoring --version "~75.0.0" -f values.yaml --wait
-
-kubectl apply -f httproute.yaml
+argocd app sync platform-project
+argocd app sync platform-root
+argocd app sync kps
+argocd app sync monitoring-resources
+argocd app sync kps
 ```
 
-기존 운영 설치의 변경은 위 신규 설치 명령 대신 §4의 Argo CD 절차를 따른다. Grafana를 rollback으로 다시 활성화할 때 admin 자격은 `grafana.admin.existingSecret: grafana-admin-fixed` 로 고정한다 (`values.yaml`). 기존 Secret을 유지하며, 새 환경에서만 §5의 Secret 생성 절차를 사용한다. chart 는 `admin.existingSecret` 이 지정되면 자체 admin Secret 을 만들지 않고 이 Secret 을 `GF_SECURITY_ADMIN_USER/PASSWORD` 로 주입한다:
+Grafana를 rollback으로 다시 활성화할 때 admin 자격은 `grafana.admin.existingSecret: grafana-admin-fixed` 로 고정한다 (`values.yaml`). 기존 Secret을 유지하며, 새 환경에서만 §5의 Secret 생성 절차를 사용한다. chart 는 `admin.existingSecret` 이 지정되면 자체 admin Secret 을 만들지 않고 이 Secret 을 `GF_SECURITY_ADMIN_USER/PASSWORD` 로 주입한다:
 
 ```bash
 kubectl -n monitoring get secret grafana-admin-fixed \
@@ -42,11 +38,11 @@ kubectl -n monitoring get secret grafana-admin-fixed \
 
 ### 알림 수신처 배선 (Discord)
 
-Alertmanager 는 배선 전까지 수신처가 `"null"` 뿐 — 알림이 어디로도 발송되지 않는다. 라우팅/수신처는 **`alertmanager-config.yaml`(AlertmanagerConfig CR, git-가시)** 이 소유하고 `values.yaml` 의 `alertmanagerSpec.alertmanagerConfiguration` 이 참조한다(global 모드). 웹훅 URL 만 사전 수동 Secret 으로 분리 (`grafana-admin-fixed` 와 동일 패턴) — CR 의 `apiURL` 이 secretKeyRef 로 가리키고, operator 가 config 생성 시점에 값을 인라인하므로 파드 마운트 불요.
+현재 선언된 기본 수신처는 Discord이며 Watchdog은 `"null"`로 라우팅한다. Secret과 CR이 준비되고 동기화되어야 Discord 알림을 전송할 수 있다. 라우팅/수신처는 **`alertmanager-config.yaml`(AlertmanagerConfig CR, git-가시)** 이 소유하고 `values.yaml` 의 `alertmanagerSpec.alertmanagerConfiguration` 이 참조한다(global 모드). 웹훅 URL 만 사전 수동 Secret 으로 분리 (`grafana-admin-fixed` 와 동일 패턴) — CR 의 `apiURL` 이 secretKeyRef 로 가리키고, operator 가 config 생성 시점에 값을 인라인하므로 파드 마운트 불요.
 
 > chart `alertmanager.config` + `webhook_url_file` 방식은 불가 — AM 바이너리(v0.28)는 지원하지만 **prometheus-operator(v0.83) config 파서가 그 필드를 몰라** `-generated` Secret 생성을 거부한다. AlertmanagerConfig 는 operator 자기 CRD 라 이 파서 불일치가 구조적으로 없다. helm CLI 직접 upgrade 도 불가 — kps 는 ArgoCD 가 ServerSideApply 로 소유해 field manager 충돌로 거부된다 (`../../argocd/README.md` §6 adopt 구조).
 
-global 모드는 차트 기본 config 를 **통째로 대체**한다 — kps 기본 inhibit 규칙과 Watchdog→null 라우트가 CR 에 명시적으로 들어가 있는 이유. info 알림은 InfoInhibitor 억제로 통지되지 않고 warning 이상만 도착한다.
+global 모드는 차트 기본 config 를 **통째로 대체**한다 — kps 기본 inhibit 규칙과 Watchdog→null 라우트가 CR 에 명시적으로 들어가 있는 이유. InfoInhibitor가 같은 namespace의 info 알림을 억제하며 나머지 알림은 라우팅과 inhibit 규칙에 따라 전달된다.
 
 ① Discord 채널 → 설정 → 연동 → 웹훅 생성, URL 복사 — `https://discord.com/api/webhooks/<id>/<token>` 그대로 (접미사 불요).
 
@@ -86,7 +82,7 @@ kubectl -n monitoring get prometheus,alertmanager
 kubectl -n monitoring get pvc
 ```
 
-Prometheus 타겟 (전부 up, control-plane `down` 타겟 없어야 함):
+Prometheus 타겟을 확인한다. 비활성화한 control-plane 타겟은 없어야 하며, node-exporter는 아래 PSA 제약도 확인한다:
 
 ```bash
 kubectl -n monitoring port-forward svc/kps-kube-prometheus-stack-prometheus 9090:9090
@@ -102,7 +98,7 @@ operator + Prometheus + Alertmanager + Grafana + node-exporter + kube-state-metr
 `kubeControllerManager` / `kubeScheduler` / `kubeEtcd` / `kubeProxy` `enabled: false`. OKE는 컨트롤 플레인이 관리형이라 해당 메트릭 엔드포인트 접근 불가 → 켜두면 영구 `down` 타겟 + 오탐 알림. 노드/워크로드 메트릭만 수집.
 
 ### node-exporter hostNetwork 비활성
-PSA `baseline`은 호스트 네임스페이스(hostNetwork)를 금지. `hostNetwork: false`로 baseline 충족. host `/proc`·`/sys` hostPath 마운트는 baseline 허용이라 노드 메트릭 수집 정상 — ServiceMonitor가 pod IP:9100으로 스크랩.
+PSA `baseline`은 hostNetwork와 hostPath를 모두 금지한다. `hostNetwork: false`는 전자만 해결한다. 고정된 node-exporter 차트의 기본 hostPath 볼륨은 baseline에 위배되므로 예외가 없다면 Pod 생성이 거부되고 노드 메트릭 수집을 보장할 수 없다. 배포 환경의 admission 설정과 DaemonSet 이벤트를 확인해야 한다. [차트 기본값](https://github.com/prometheus-community/helm-charts/blob/kube-prometheus-stack-75.0.0/charts/prometheus-node-exporter/values.yaml), [Pod Security Standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/) (2026-11-04 확인).
 
 ### Grafana 비활성화와 대상 prune
 `grafana.enabled: false`는 chart가 Grafana Deployment, Service 등 Grafana 리소스를 더 이상 렌더하지 않게 한다. Grafana는 `persistence.enabled: false`였으므로 별도 PVC나 데이터 마이그레이션은 없다. 그러나 Argo CD `kps` Application은 자동 동기화/자동 prune을 설정하지 않았으므로, Git 변경만으로 기존 워크로드가 삭제되지는 않는다.

@@ -12,7 +12,7 @@
 
 ## 2. 설치
 
-Prometheus의 기존 데이터·보존 설정(`15d`, `45GiB`)을 유지한다. PVC 전체를 마운트한 준비 Job만 최상위 `loki/`를 생성하며, Prometheus 컨테이너의 `/prometheus` 안에 디렉터리를 만들지 않는다.
+저장소 루트에서 실행한다. Prometheus의 기존 데이터·보존 설정(`15d`, `45GiB`)을 유지한다. PVC 전체를 마운트한 준비 Job만 최상위 `loki/`를 생성하며, Prometheus 컨테이너의 `/prometheus` 안에 디렉터리를 만들지 않는다.
 
 ```bash
 PROM_POD=prometheus-kps-kube-prometheus-stack-prometheus-0
@@ -22,6 +22,11 @@ PROM_PV=$(kubectl -n monitoring get pvc "$PROM_PVC" -o jsonpath='{.spec.volumeNa
 
 kubectl get nodes -l storage.ggang.cloud/observability=true
 kubectl get pv "$PROM_PV"
+```
+
+노드 목록에 다른 노드가 있으면 라벨을 추가하기 전에 배치를 확인한다.
+
+```bash
 kubectl label node "$OBS_NODE" storage.ggang.cloud/observability=true --overwrite
 kubectl patch pv "$PROM_PV" --type merge -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
 
@@ -30,8 +35,6 @@ kubectl -n monitoring wait --for=condition=Complete job/loki-storage-check --tim
 kubectl -n monitoring logs job/loki-storage-check -c prepare
 kubectl -n monitoring logs job/loki-storage-check -c check
 ```
-
-노드 목록에 다른 노드가 있으면 라벨을 추가하기 전에 배치를 확인한다.
 
 준비 Job은 기존 `prometheus-db/`를 변경하지 않고 새 `loki/`만 UID 10001 / GID 2000 / mode 2770으로 만든다. 재실행 시 소유권이 다르면 자동 수정하지 않고 중단한다. API token은 마운트하지 않는다. root 초기화 컨테이너는 namespace의 PSA baseline 안에서 동작하므로 restricted 경고가 나올 수 있다.
 

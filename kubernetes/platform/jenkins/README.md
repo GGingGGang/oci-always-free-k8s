@@ -87,6 +87,8 @@ Trivy는 root 소유 hostPath 캐시를 쓰기 위해 UID 0으로 실행하며, 
 
 ### Jenkins 설치
 
+아래 명령은 `kubernetes/platform/jenkins` 디렉터리에서 실행한다. 빌드 Pod를 시작하기 전에 아래 Secret 운영 절의 `build/ghcr-pull`과 `build/cosign-key`도 준비한다.
+
 ```bash
 export GHCR_USER=<your-github-user>
 export GHCR_TOKEN=<your-ghcr-write-token>
@@ -204,7 +206,7 @@ PV(`oci-bv` 50Gi) 대신 emptyDir. 사유:
 
 ### 단일 인스턴스 controller
 
-HA controller는 Jenkins 라이선스/플러그인 호환성 폭증. 본 환경은 Always Free 24GB RAM에서 *동작/재현성*이 *고가용성*보다 우위. RTO는 "JCasC 재로드 + agent pod 재생성"으로 분단위.
+HA controller는 Jenkins 라이선스/플러그인 호환성 폭증. 본 환경은 이 프로젝트 PAYG 계정의 무료 24GB RAM 구성에서 *동작/재현성*이 *고가용성*보다 우위. RTO는 "JCasC 재로드 + agent pod 재생성"으로 분단위.
 
 ### Plugins 전체 pin + `installLatestPlugins: false`
 
@@ -278,17 +280,17 @@ JCasC 로 선언적 정의. Jenkinsfile 에서 `agent { label 'kaniko' }` 만 �
 
 핵심 결정:
 
-- **`build` NS 격리** — Kaniko 가 root + capabilities 요구. `cicd` 의 PSA `baseline` 을 우회하지 않고 `build` NS (`enforce: privileged`) 로 분리. controller 침해 시 빌드 SA 직접 도달 ❌
+- **`build` NS 격리** — Kaniko 가 root + capabilities 요구. `cicd` 의 PSA `baseline` 을 우회하지 않고 `build` NS (`enforce: privileged`) 로 분리. controller는 `build`에 Pod를 생성할 수 있으므로 이 namespace가 controller 침해에 대한 보안 경계는 아니다
 - **`kaniko-builder` SA + `automountServiceAccountToken: false`** — Kaniko 는 GHCR push 외 k8s API 호출 불필요. SA 토큰 마운트 차단으로 *빌드 컨테이너가 k8s API 통한 측면 이동 ❌*
 - **`:v1.23.2-debug` 이미지** — Jenkins Kubernetes plugin 이 컨테이너에 `sleep` 주입해서 agent 가 살아 있어야 `exec` 가능. `:debug` 는 busybox 포함, default `:latest` 는 executor binary 만 있어 sleep ❌
 - **`ghcr-push` Secret projected 마운트** — `/kaniko/.docker/config.json` 으로 kaniko 가 자동 인식. Secret type `kubernetes.io/dockerconfigjson` 필수
-- **ARM64 빌드** — A1.Flex 워커. Kaniko 는 호스트 아키텍처 따라감 → ARM 자동. Jenkinsfile 에서 `--customPlatform=linux/arm64` 명시 권장 (base image multi-arch 검증 의무)
+- **ARM64 빌드** — A1.Flex 워커. Kaniko 는 호스트 아키텍처 따라감 → ARM 자동. shared library `kanikoBuild`의 기본값은 `--custom-platform=linux/arm64` (base image multi-arch 검증 필요)
 
-cache + memory 폭주 회피 args (Jenkinsfile 에서 주입):
+cache + memory 폭주 회피 args (`kanikoBuild`가 주입):
 
 ```bash
 --cache=true
---cache-repo=ghcr.io/${GHCR_USER}/cache
+--cache-repo=<image>/cache
 --cache-ttl=168h
 --snapshot-mode=redo
 --use-new-run
@@ -312,7 +314,7 @@ ci(service: 'core')
 
 ### Trivy 컨테이너 + HTML 리포트 게시 — `agent.podTemplates.kaniko` 확장
 
-같은 pod 에 `trivy`(`docker.io/aquasec/trivy:0.72.0`, kaniko 와 동일하게 `sleep 99d` 로 유지) 컨테이너 추가. kaniko 와 같은 `ghcr-push` docker config 를 `/trivy/.docker` 로 projected 마운트(`DOCKER_CONFIG` env) — push 된 이미지를 GHCR 에서 pull 해 스캔하므로 registry 인증 필요. 취약점 DB 는 인터넷 아웃바운드로 스캔 시점에 갱신(별도 volume 불요).
+같은 pod 에 `trivy`(`docker.io/aquasec/trivy:0.72.0`, kaniko 와 동일하게 `sleep 99d` 로 유지) 컨테이너 추가. kaniko 와 같은 `ghcr-push` docker config 를 `/trivy/.docker` 로 projected 마운트(`DOCKER_CONFIG` env) — push 된 이미지를 GHCR 에서 pull 해 스캔하므로 registry 인증 필요. 취약점 DB 는 인터넷 아웃바운드로 스캔 시점에 갱신하고 위 hostPath 캐시를 사용한다.
 
 - **`installPlugins`에 `htmlpublisher` 포함** — `publishHTML` 스텝 제공.
 - **`controller.javaOpts` 로 CSP 완화**: Jenkins 기본 `hudson.model.DirectoryBrowserSupport.CSP`(`default-src 'none'`)는 아카이브/HTML Publisher 가 서빙하는 정적 페이지에서 인라인 `<style>`/`<script>` 를 전부 막는다. trivy 공식 HTML 템플릿(`jenkins-shared-library/resources/trivy/html.tpl`)이 인라인 스타일 + 인라인 스크립트(정렬/토글용, 외부 CDN 참조 없음 — 체크인 전 직접 확인)만 쓰므로, 전면 비활성화 대신 `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self'` 로 좁혀서 완화.
@@ -359,24 +361,24 @@ controller는 빌드 안 함. agent Pod만 빌드 → controller는 *오케스�
 `rbac.yaml` 구조:
 
 - `cicd/jenkins` SA — controller 신원. agent Pod 관리 권한 두 곳에 분배:
-  - `cicd` NS — 일반 빌드 agent Pod CRUD
-  - `build` NS — Kaniko 빌드 Pod CRUD (cross-NS RoleBinding)
+  - `cicd` NS — agent Pod 관리, ConfigMap·Secret 읽기 및 event watch
+  - `build` NS — Kaniko 빌드 Pod 관리 및 event watch (cross-NS RoleBinding)
 - `build/kaniko-builder` SA — 빌드 Pod 신원. `automountServiceAccountToken: false`. k8s API 권한 0건
 
 권한 경계 narrative:
 
-- controller (`jenkins` SA) 는 *Pod 만들 권한* 만 가짐 — image 자체에 대한 권한 ❌
-- 빌드 Pod (`kaniko-builder` SA) 는 *GHCR push token* 만 가짐 — Pod 만들 권한 ❌
+- controller (`jenkins` SA)는 두 namespace에서 Pod 관리 권한을 갖고, `cicd`에서 ConfigMap·Secret도 읽을 수 있다. `build`에서 Pod를 생성할 수 있으므로 해당 namespace의 Secret을 마운트하는 Pod도 생성할 수 있다.
+- 빌드 Pod는 `ghcr-push`, `cosign-key`를 마운트하고 `ghcr-pull`을 이미지 pull에 사용한다. `kaniko-builder` SA에는 이 매니페스트에서 API 권한을 부여하지 않는다.
 - 둘 다 `app` NS 권한 0건 — 배포는 git commit (manifest 패턴) 으로만
 
-manifest 변경 패턴: Jenkins는 Kubernetes API를 직접 호출하지 않으며, shared library `deployBump`로 `k8s-gitops`의 `main`에 image tag 변경을 직접 push한다. Jenkins 성공은 GitOps push까지를 뜻하며 실제 배포 완료는 ArgoCD의 Sync와 Health 상태로 확인한다.
+manifest 변경 패턴: Jenkins는 배포를 위해 Kubernetes API를 직접 호출하지 않으며, shared library `deployBump`로 `k8s-gitops`의 `main`에 image tag 변경을 직접 push한다. Jenkins 성공은 GitOps push까지를 뜻하며 실제 배포 완료는 ArgoCD의 Sync와 Health 상태로 확인한다.
 
 ### HTTPRoute — admin UI 는 parked, webhook 만 public
 
 `httproute.yaml` 한 파일에 두 HTTPRoute 리소스(`---` 구분) — *접근 경로는 호출자가 누구냐로 결정*한다. ArgoCD `jenkins-httproute` Application(`directory.include: httproute.yaml`)이 이 파일을 sync 하므로 라우트는 GitOps 로 관리. **별도 파일/Application 신설 ❌** — app-of-apps 의 단일 `httproute.yaml` include 패턴을 따른다(별도 파일은 include 밖이라 ArgoCD 가 adopt 못 함). 독립 on/off 는 파일이 아니라 `---` 로 나뉜 *리소스* 단위 주석 토글로 확보.
 
 - **admin UI (`jenkins.ggang.cloud`, 전체 path)** — tailnet 컷오버로 **주석 처리(parked)**, 렌더링 0. admin은 tailnet ClusterIP 전용. 운영자는 tailnet 노드가 될 수 있으니 컨트롤 표면은 사설로.
-- **webhook (`ci-hook.ggang.cloud`, `/github-webhook/` 만)** — **active**. GitHub(SaaS)는 tailnet 노드가 될 수 없으니 이벤트 인입은 public 일 수밖에 없다. 단 노출은 *한 경로*로 좁히고 HMAC 으로 게이트.
+- **webhook (`ci-hook.ggang.cloud`, `/github-webhook/` 만)** — **active**. GitHub(SaaS)는 tailnet 노드가 될 수 없으니 이벤트 인입은 public 일 수밖에 없다. 노출은 해당 경로 prefix로 좁히며 HMAC 검증은 미구현이다.
 
 #### Webhook — path-scoped public 인입
 
@@ -384,7 +386,7 @@ manifest 변경 패턴: Jenkins는 Kubernetes API를 직접 호출하지 않으�
 
 보호 레이어:
 
-1. **경로 스코프** — HTTPRoute 가 `/github-webhook/` 만 매칭. `/`·`/script` 등은 매칭 룰 없어 404 → admin UI 는 public 으로 안 샘.
+1. **경로 스코프** — HTTPRoute 가 `/github-webhook/` 경로 prefix를 매칭. `/`·`/script` 등은 매칭 룰 없어 404 → admin UI 는 public 으로 안 샘.
 2. **HMAC (설계, 미적용)** — `gh-webhook-secret` 을 GitHub repo webhook 설정의 Secret 필드 + Jenkins GitHub plugin 양쪽에 등록하면 `X-Hub-Signature-256` 검증으로 서명 없는 요청을 거부할 수 있다. **현재 이 Secret 을 생성하거나 JCasC 에 연결하는 매니페스트/설정이 레포에 없음** — 미구현 상태. 지금은 경로 스코프(1번)만으로 방어.
 3. *(선택, 미적용)* GitHub hooks IP 대역(`api.github.com/meta`) allowlist — defense-in-depth. 대역 변동 유지비 있어 1·2 로 충분, 후속 검토.
 
@@ -392,13 +394,14 @@ manifest 변경 패턴: Jenkins는 Kubernetes API를 직접 호출하지 않으�
 
 > 트리거를 webhook 으로 둔 이유: SCM polling 은 public 표면 0 이지만 지연·낭비. webhook-via-Gateway 는 GitHub Actions 에 tailscale 을 심는 안티패턴(앱 레포마다 네트워크 신원 분산)을 피하면서 이벤트 드리븐을 얻는다 — 앱 레포엔 tailscale 0, 트리거 설정은 GitHub repo settings(git 밖).
 
-### Secret 운영 — `ghcr-push` · `jenkins-git-pat` 선행, 나머지는 앱 레포 시점
+### Secret 운영 — controller 및 빌드 Pod 선행 조건
 
 본 setup 에 필수:
 
 - `ghcr-push` (Kaniko 빌드용, `build` NS) — type `kubernetes.io/dockerconfigjson`
 - `ghcr-pull` (`build` NS) — podTemplate `imagePullSecrets` 용. 자체 빌드 cosign 이미지(`ghcr.io/ggingggang/cosign`)가 private GHCR 소속이라 빌드 파드의 이미지 pull 에 필요. 앱 NS 의 동명 Secret 을 복사.
 - `cosign-key` (이미지 서명용, `build` NS) — key `cosign.key`(암호화 개인키) + `password`. cosign 컨테이너가 파일 마운트 + `COSIGN_PASSWORD` env 로 소비. 생성: `cosign generate-key-pair` → `kubectl create secret generic cosign-key -n build --from-file=cosign.key --from-literal=password=<비번>`. 공개키(`cosign.pub`)는 Kyverno 검증용으로 별도 보관.
+- `jenkins-admin-fixed` (`cicd` NS) — `jenkins-admin-user`, `jenkins-admin-password` 키로 관리자 자격증명을 제공한다.
 - `jenkins-git-pat` (`cicd` NS, key `token`) — `containerEnv` 의 `GIT_PAT` → JCasC `credentials-config` 의 `github-token` 비밀번호. GitOps `main`에 매니페스트 bump를 push하는 용도. **미존재 시 controller pod 가 `secretKeyRef` 로 기동 실패.**
 
 앱 레포 등장 시점에 추가 도입:
@@ -471,7 +474,7 @@ kubectl describe pod -n build <kaniko-pod>
 - base image multi-arch 미보장 → `no image found ... architecture "arm64"`. alpine 등 amd64 단일 아키 태그 회피, 멀티아치 태그 사용. registry 매니페스트로 아키 확인(위 Agent 결정 참조)
 - OOMKilled (exit 137) → cache 미사용 시 흔함. `--cache=true` + `--snapshot-mode=redo` 적용. limit `2Gi` 부족하면 chart values 의 podTemplate memory limit 상향
 - Jenkins controller 가 `build` NS 에 Pod 못 만듦 → `rbac.yaml` 의 `jenkins-builder` RoleBinding 적용 확인
-- **agent pod `FailedScheduling: Insufficient cpu`** → 노드 requests 장부 포화(실사용 아님, `kubectl top nodes` 로 괴리 확인). 좀비 pod(`ImageInspectError` 등)가 requests 점유 시 `kubectl delete pod -n build <pod> --force --grace-period=0`. requests 는 실측 기반 하향(controller/kaniko 200m)
+- **agent pod `FailedScheduling: Insufficient cpu`** → 노드 requests 장부 포화(실사용 아님, `kubectl top nodes` 로 괴리 확인). 좀비 pod(`ImageInspectError` 등)가 requests 점유 시 `kubectl delete pod -n build <pod> --force --grace-period=0`. 현재 requests는 controller `100m`, kaniko `0`
 
 ### 단일 인스턴스 RTO
 

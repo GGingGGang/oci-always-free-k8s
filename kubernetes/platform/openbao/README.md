@@ -19,6 +19,8 @@
 
 ## 공유 PVC 준비
 
+아래 파일 경로와 명령은 저장소의 `kubernetes/platform/openbao` 디렉터리를 기준으로 한다. NATS는 Argo CD `nats` Application으로 배포하며 자동 동기화가 설정되지 않아 변경 시 수동 동기화가 필요하다. OpenBao와 준비 Job은 Argo CD Application이 없으므로 아래 절차로 수동 관리한다.
+
 NATS values의 subPath·affinity 설정을 먼저 반영하고 기존 stream/consumer와 송수신을 확인한다. 기존 JetStream 물리 경로는 옮기지 않는다. NATS가 PVC 전체를 마운트한 상태에서 OpenBao 데이터를 넣지 않는다.
 
 ```bash
@@ -33,7 +35,7 @@ kubectl logs -n data job/openbao-storage-prepare
 kubectl delete job -n data openbao-storage-prepare
 ```
 
-준비 Job은 root와 CHOWN capability로 새 `openbao` 디렉터리만 생성한다. 기존 디렉터리의 소유권·권한이 예상과 다르면 실패하며, 기존 데이터에 재귀적 chown/chmod를 하지 않는다. ServiceAccount 토큰은 마운트하지 않는다. namespace의 PSA baseline에서 실행 가능하며 restricted 경고는 예상된다.
+준비 Job은 실행 중인 NATS Pod와 같은 노드에 배치되며 PVC에 `jetstream` 디렉터리가 있어야 성공한다. 준비 Job은 root와 CHOWN capability로 새 `openbao` 디렉터리만 생성한다. 기존 디렉터리의 소유권·권한이 예상과 다르면 실패하며, 기존 데이터에 재귀적 chown/chmod를 하지 않는다. ServiceAccount 토큰은 마운트하지 않는다. namespace의 PSA baseline에서 실행 가능하며 restricted 경고는 예상된다.
 
 Retain은 PVC 삭제 시 backing volume의 자동 삭제를 막는다. 백업을 대신하지 않는다. 공유 PVC는 NATS StatefulSet에서 생성되므로 NATS 제거·PVC 정리 시 OpenBao 사용 여부도 확인한다.
 

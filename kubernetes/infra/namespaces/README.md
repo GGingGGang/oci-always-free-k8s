@@ -10,9 +10,13 @@
 
 ## 2. 설치
 
+저장소 루트에서 부트스트랩할 때:
+
 ```bash
-kubectl apply -f namespaces.yaml
+kubectl apply -f kubernetes/infra/namespaces/namespaces.yaml
 ```
+
+이후 Argo CD `namespaces` Application이 같은 매니페스트를 관리한다.
 
 생성되는 네임스페이스:
 
@@ -23,7 +27,7 @@ kubectl apply -f namespaces.yaml
 | `external-dns` | external-dns 전용 |
 | `cicd` | ArgoCD, Jenkins (PSA `enforce=baseline`, Istio ambient enrolled) |
 | `build` | Kaniko 빌드 Pod 전용 (PSA `enforce=privileged`) |
-| `monitoring` | kube-prometheus-stack (Prometheus/Alertmanager/Grafana, PSA `enforce=baseline`) — Loki/Tempo/Kiali 는 예정 |
+| `monitoring` | kube-prometheus-stack, Loki, Tempo, Alloy (PSA `enforce=baseline`) |
 | `vault` | 이전 OpenBao namespace. 현재 workload 없음, namespace 삭제는 별도 관리 |
 | `tailscale` | Tailscale subnet router (PSA `enforce=baseline`) |
 | `app` | 워크로드 (PSA `enforce=restricted`, Istio ambient enrolled) |
@@ -56,7 +60,7 @@ PSA enforce 적용 네임스페이스:
 - `cicd` → `baseline` (Jenkins/ArgoCD 는 root 불필요, agent 도 non-root)
 - `build` → `privileged` (Kaniko 가 root + capability 요구)
 - `monitoring` → `baseline` (kube-prometheus-stack)
-- `vault` → `baseline` (OpenBao 는 non-root + `disable_mlock` 운영, IPC_LOCK 불필요)
+- `vault` → `baseline` (이전 OpenBao namespace, 선언 유지)
 - `tailscale` → `baseline` (userspace mode — `/dev/net/tun`/NET_ADMIN 불필요)
 - `core`/`batch`/`auth`/`notify`/`web` → `restricted` (서비스 워크로드 — `app`과 동일 정책)
 - `data` → `baseline` (Redis/NATS 백킹 — non-root 운영, host 권한 불필요)
@@ -67,7 +71,7 @@ PSA enforce 적용 네임스페이스:
 
 ### app 단일 환경
 
-dev/staging/prod 멀티 네임스페이스 분리는 OCI Always Free 24GB RAM 제약에서 비현실적 (각 환경 stack을 N배). 단일 `app` 네임스페이스 + LE staging/prod ClusterIssuer로 환경 분리 역할 흡수.
+dev/staging/prod 멀티 네임스페이스 분리는 이 프로젝트 PAYG 계정의 무료 24GB RAM 구성 제약에서 비현실적 (각 환경 stack을 N배). 단일 클러스터에서 서비스별 네임스페이스를 사용하며 LE staging/prod ClusterIssuer를 별도로 둔다.
 
 ### PSA 라벨 분배
 
@@ -77,7 +81,7 @@ dev/staging/prod 멀티 네임스페이스 분리는 OCI Always Free 24GB RAM �
 - `cicd` → `baseline`: Jenkins/ArgoCD controller. 둘 다 non-root 운영 가능하지만 `baseline` 까지만 — chart 가 가끔 capability 요구 (예: net_bind_service)
 - `build` → `privileged`: Kaniko 가 chroot/extract 위해 root + capabilities 필요. enforce 제거 ❌, 명시적으로 `privileged` 부여해서 *의도된 격리* 표현
 - `monitoring`/`kyverno` → `baseline`: 각각 kube-prometheus-stack과 정책 엔진
-- `vault` → `baseline`: 시크릿 저장소가 무방비 NS 에 살면 안 됨. OpenBao 는 k8s 에서 `disable_mlock` 운영이 기조라 IPC_LOCK capability 불필요 → baseline 통과
+- `vault` → `baseline`: 이전 OpenBao namespace의 기존 라벨 유지. 현재 OpenBao는 `data`에 배포
 - `istio-system`/`cert-manager`/`external-dns` → enforce 미적용. ambient ztunnel + istio-cni 가 host network / hostPath 등 권한 요구 (cert-manager/external-dns 는 후속 라벨 후보)
 
 핵심: Kaniko 가 root 필요하다고 `cicd` 전체 enforce 풀지 않음 — `build` 로 분리해서 *root 권한이 도달하는 NS* 를 최소화.
@@ -91,7 +95,7 @@ enrollment은 opt-in + **무중단** — sidecar 주입과 달리 Pod 재시작/
 - `app` → enrolled (워크로드 mTLS canary, 최초)
 - `core`/`batch`/`auth`/`notify`/`web` → enrolled (서비스 워크로드의 동서 통신 mTLS — east-west AuthorizationPolicy 의 신원 기반)
 - `cicd` → enrolled (ArgoCD `--insecure` 내부 hop 평문 해소)
-- `vault` → enrolled (OpenBao `tls_disable` 평문 hop 보호 — secret 경로 mTLS)
+- `vault` → enrolled (이전 OpenBao namespace의 기존 라벨 유지)
 - `data` → enrolled (app↔Redis/NATS hop mTLS — 백킹 서비스 평문 hop 해소)
 - 제외: `istio-system`(컨트롤플레인 자신), `tailscale`(subnet router — 캡처 시 advertise route 동작 깨짐), `build`(Kaniko 빌드 네트워킹), `kube-*`/`default`
 - 보류: `monitoring`(Prometheus scrape 간섭 별도 검토), `cert-manager`/`external-dns`(egress 위주, 가치 낮음)
@@ -115,7 +119,7 @@ pod-security.kubernetes.io/warn: restricted
 pod-security.kubernetes.io/audit: restricted
 ```
 
-현재 매니페스트는 `enforce` + `warn` 모두 박힘 (`build` 는 `enforce` 만 — privileged NS 에 restricted warn 은 노이즈).
+현재 매니페스트에서 `cicd`, `monitoring`, `vault`, `tailscale`, `app`, `data`, `core`, `batch`, `auth`, `notify`, `web`, `kyverno`는 `enforce`와 `warn`을 함께 지정한다. `build`는 `enforce`만 지정하고 `istio-system`, `cert-manager`, `external-dns`에는 둘 다 없다.
 
 ### 신규 네임스페이스 추가
 

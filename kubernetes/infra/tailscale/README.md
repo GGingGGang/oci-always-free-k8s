@@ -1,6 +1,6 @@
 # Tailscale
 
-관리 플레인 접근 경로. subnet router pod 1개가 VCN + Service CIDR을 tailnet에 광고 — kubectl / DB / admin UI를 사설 경로로 전환하고 퍼블릭 admin 표면을 제거.
+관리 플레인 접근 경로. subnet router pod 1개가 VCN + Service CIDR을 tailnet에 광고하도록 구성 — kubectl / DB / admin UI의 사설 경로를 검증한 뒤 퍼블릭 admin 표면을 제거한다.
 
 참조:
 - https://tailscale.com/kb/1185/kubernetes (2026-06 확인)
@@ -30,6 +30,8 @@ router pod는 tailnet 노드이자 subnet router. tailnet으로 들어온 패킷
 - 이미지 핀: `tailscale/tailscale:v1.92.4` (2026-06 작성 시점 stable)
 
 ## 2. 설치
+
+명령은 `kubernetes/infra/tailscale/` 디렉터리에서 실행한다.
 
 ### 2-1. ACL — 태그 소유 + 라우트 자동승인
 
@@ -91,7 +93,7 @@ kubectl logs -n tailscale deploy/tailscale-router --tail=30   # 'tags' 에러 �
 # 노트북에서 (tailscale up 상태)
 tailscale set --accept-routes=true
 tailscale status                  # oke-vcn-router 보이는지
-nc -vz 10.0.201.7 3306            # DB (VCN 대역) 직행
+nc -vz "$(terraform -chdir=../../../terraform output -raw heatwave_ip)" 3306  # DB (VCN 대역)
 curl -I http://<argocd-server ClusterIP>   # admin (Service 대역)
 ```
 
@@ -115,7 +117,7 @@ argocd app sync argocd-httproute jenkins-httproute monitoring-httproute --prune 
 #    kubectl_api 6443 ingress 룰 삭제 후 apply
 ```
 
-이후 admin UI 접근(tailnet 경유): `http://<argocd-server ClusterIP>` / `http://<jenkins ClusterIP>:8080` / `http://<grafana ClusterIP>`.
+이후 admin UI 접근(tailnet 경유): `http://<argocd-server ClusterIP>` / `http://<jenkins ClusterIP>:8080`. Grafana는 현재 `monitoring/kps/values.yaml`에서 비활성화되어 있으며 활성화한 경우에만 ClusterIP로 접근한다.
 
 ## 4. 결정
 
@@ -138,7 +140,7 @@ Always Free AMD VM subnet router 대안 비채택 — 관리 대상 OS 1개 추�
 
 ### userspace mode (kernel mode 비채택)
 
-kernel mode는 `/dev/net/tun` + `NET_ADMIN` 필요 = PSA baseline 위반. userspace mode는 특수 권한 0개 — 인바운드(tailnet → 클러스터) 용도에 충분. 클러스터 → tailnet 방향 발신이 필요해지면 재검토.
+kernel mode는 `/dev/net/tun` + `NET_ADMIN` 필요 = PSA baseline 위반. userspace mode는 특수 권한 없이 TCP/UDP 연결을 pod에서 재생성한다. 일반 IP 포워딩이 아니며 ICMP ping은 재생성해 응답하고 그 외 ICMP 및 다른 IP 프로토콜은 지원하지 않는다 ([Tailscale 문서](https://tailscale.com/docs/reference/kernel-vs-userspace-routers)). 클러스터 → tailnet 방향 발신이 필요해지면 재검토.
 
 ### per-device (site-to-site 비채택)
 
@@ -146,7 +148,7 @@ OCI Site-to-Site VPN(IPSec): 집 고정 거점 모델 — 로밍 불가 + 집에
 
 ### state를 k8s Secret에 영속
 
-`TS_KUBE_SECRET=tailscale-state` — pod 재생성에도 노드 신원 유지 (재인증 불요). RBAC는 해당 Secret 1개로 `resourceNames` 한정.
+`TS_KUBE_SECRET=tailscale-state` — pod 재생성에도 노드 신원 유지 (재인증 불요). RBAC는 Secret 생성 권한과 `tailscale-state`에 한정된 get/update/patch 권한을 부여한다. create 권한은 `resourceNames`로 제한되지 않는다.
 
 ### TS_ACCEPT_DNS=false
 
@@ -156,11 +158,11 @@ tailnet DNS가 pod resolv.conf를 덮으면 클러스터 DNS(CoreDNS) 깨짐. �
 
 ### DERP 릴레이 폴백은 설계된 동작
 
-pod가 NAT Gateway 뒤라 인바운드 hole punching 수신 불가 — 직결 성립은 클라이언트 쪽 NAT에 달림. LTE/CGNAT 환경이면 DERP 릴레이 경유 확정. kubectl/SQL 대역폭에는 영향 없음. "왜 느리지" 디버깅 대상 아님.
+NAT와 방화벽 상태에 따라 직결이 어려우면 DERP 또는 사용 가능한 peer relay를 경유할 수 있다. DERP는 지연이 늘고 처리량이 제한될 수 있으므로 `tailscale ping`과 `tailscale netcheck`로 확인한다 ([Tailscale 문서](https://tailscale.com/docs/reference/troubleshooting/poor-performance-tailnet)).
 
 ### 태그 / 키 회전
 
-태그 노드 key는 만료 비활성이라 평시 재인증 없음. auth key 유출 시 admin console에서 revoke + 재발급 → `tailscale-auth` Secret 갱신 → `kubectl rollout restart deploy/tailscale-router -n tailscale`. state Secret(`tailscale-state`)이 살아있는 한 노드 신원은 유지되므로 키는 재등록 시에만 쓰임. OpenBao 이관 후보.
+태그 노드의 device key expiry는 기본 비활성이다. auth key의 유효기간은 별도이므로 재등록 전에 확인한다. auth key 유출 시 admin console에서 revoke + 재발급 → `tailscale-auth` Secret 갱신 → `kubectl rollout restart deploy/tailscale-router -n tailscale`. state Secret(`tailscale-state`)이 살아있는 한 노드 신원은 유지되므로 키는 재등록 시에만 쓰임. OpenBao 이관 후보.
 
 ### break-glass — 클러스터 다운 = 접근 경로 동반 다운
 
@@ -173,4 +175,4 @@ tailscale pod가 클러스터 안에 살므로 클러스터 장애 시 사설 �
 
 ### non-root 기동 실패 시
 
-`runAsUser: 1000` + userspace 조합은 문서상 지원이나, 이미지 버전에 따라 socket 경로 권한 이슈 가능. CrashLoop 시 1차 조치: pod securityContext의 `runAsUser`/`runAsNonRoot` 제거 (root 기동 — baseline은 통과). 원인은 로그로 확인 후 결정.
+`runAsUser: 1000` + userspace 조합은 문서상 지원이나, 이미지 버전에 따라 socket 경로 권한 이슈 가능. CrashLoop 시 1차 조치: pod securityContext의 `runAsUser`/`runAsGroup`/`runAsNonRoot` 제거 (root 기동 — baseline은 통과). 원인은 로그로 확인 후 결정.

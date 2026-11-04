@@ -2,6 +2,8 @@
 
 오라클 클라우드(OCI)의 Block Volume CSI 드라이버와 StorageClass(`oci-bv`)가 정상적으로 프로비저닝 및 마운트되는지 검증하기 위한 스모크 테스트 가이드입니다.
 
+모든 명령은 `kubernetes/test/storage` 디렉터리에서 실행합니다.
+
 ## 1. 전제 조건
 - OKE 클러스터에 OCI Block Volume CSI 드라이버가 설치되어 있어야 합니다.
 - `oci-bv` 명칭의 StorageClass가 사전 등록되어 있어야 합니다.
@@ -25,7 +27,7 @@ pod/csi-smoketest created
 
 OCI Block Volume이 정상적으로 생성되어 클러스터 내 볼륨(csi-3c14c77a-...)으로 바인딩되었는지 확인합니다.
 
-`$ kubectl get pvc csi-smoketest`
+`$ kubectl -n default get pvc csi-smoketest`
 ```bash
 NAME            STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
 csi-smoketest   Bound    csi-3c14c77a-3237-4ab0-8125-a2f5432b87c4   50Gi       RWO            oci-bv         1m
@@ -34,7 +36,7 @@ csi-smoketest   Bound    csi-3c14c77a-3237-4ab0-8125-a2f5432b87c4   50Gi       R
 ### ② Pod 상태 및 볼륨 Attach 모니터링
 Pod가 생성되면서 OCI 인스턴스에 블록 볼륨이 물리적으로 맵핑(Attach)되고 컨테이너가 정상 구동되는지 확인합니다.
 
-`$ kubectl get pod csi-smoketest -w`
+`$ kubectl -n default get pod csi-smoketest -w`
 ```
 NAME            READY   STATUS    RESTARTS   AGE
 csi-smoketest   1/1     Running   0          46s
@@ -44,7 +46,7 @@ csi-smoketest   1/1     Running   0          46s
 볼륨이 마운트된 내부 경로(/data)에 데이터가 정상적으로 저장되고 읽히는지 이진 검증을 수행합니다
 
 ```
-$ kubectl exec csi-smoketest -- cat /data/hello
+$ kubectl -n default exec csi-smoketest -- cat /data/hello
 csi-smoketest ok
 ```
 
@@ -66,7 +68,7 @@ csi-smoketest ok
 
 ```bash
 kubectl delete -f csi-smoketest.yaml
-kubectl get pvc csi-smoketest   # NotFound 확인
+kubectl -n default get pvc csi-smoketest   # NotFound 확인
 ```
 
 PVC 삭제 후에도 OCI 콘솔에 Block Volume 이 잔존하면 (StorageClass `reclaimPolicy` 확인 후) 수동 삭제.

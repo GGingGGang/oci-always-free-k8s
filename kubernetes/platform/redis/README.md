@@ -15,7 +15,7 @@ MSA 워크로드용 인메모리 캐시. cache-aside 패턴 — source of truth 
 
 ## 2. 설치
 
-GitOps — ArgoCD `redis` Application(`apps/redis.yaml`, `path: kubernetes/platform/redis`, `include: "*.yaml"`)이 sync. 부트스트랩/수동 적용:
+GitOps — ArgoCD `redis` Application(`../argocd/apps/redis.yaml`, `path: kubernetes/platform/redis`, `include: "*.yaml"`)으로 관리한다. 자동 sync는 설정하지 않았다. 수동 적용은 이 디렉터리에서 실행한다:
 
 ```bash
 kubectl apply -f redis.yaml
@@ -45,7 +45,7 @@ istioctl ztunnel-config workloads -n data | grep redis   # HBONE
 
 ### ephemeral (PV 0)
 
-현재 `oci-bv` PVC는 NATS와 Prometheus에 사용한다. OpenBao는 `emptyDir` 기반 Raft이고 Redis는 source of truth가 아니므로 PVC를 사용하지 않는다. 재시작 뒤 캐시가 비어도 cache-aside가 DB에서 백필한다. `save ""` + `appendonly no`로 RDB/AOF를 비활성화하고 `/data`는 `emptyDir`로 둔다.
+현재 OpenBao는 NATS의 `oci-bv` PVC를 공유한다. Redis는 source of truth가 아니므로 PVC를 사용하지 않는다. 재시작 뒤 캐시가 비어도 cache-aside가 DB에서 백필한다. `save ""` + `appendonly no`로 RDB/AOF를 비활성화하고 `/data`는 `emptyDir`로 둔다.
 
 ### cache-aside + allkeys-lru
 
@@ -61,9 +61,9 @@ NS 는 baseline 이지만 Pod 는 restricted 수준 — `runAsNonRoot`(999) + `d
 
 ## 5. 주의 사항
 
-### 인증 미설정 — in-mesh 한정
+### 인증 미설정
 
-현재 `requirepass` 없음. ClusterIP 라 외부 노출 0, ambient mesh 내부 접근만. 멀티테넌트/민감 캐시로 확장 시 `requirepass`(OpenBao 발급) + AuthorizationPolicy 로 호출자 제한. OpenBao 이관 후보.
+현재 `requirepass` 없음. ClusterIP는 클러스터 내부 주소이며 ambient 등록만으로 호출자가 제한되지는 않는다. 클러스터 내 접근과 별도 외부 노출 경로를 점검해야 한다. 멀티테넌트/민감 캐시로 확장 시 `requirepass`(OpenBao 발급) + AuthorizationPolicy 로 호출자 제한을 검토한다.
 
 ### 재시작 = 캐시 비움
 

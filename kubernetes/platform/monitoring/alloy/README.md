@@ -26,6 +26,8 @@ kubectl -n monitoring rollout status deployment/alloy --timeout=180s
 
 ## 검증
 
+Helm 명령은 저장소 루트에서 실행한다.
+
 ```bash
 helm pull alloy --repo https://grafana.github.io/helm-charts \
   --version 1.13.1 --destination /tmp

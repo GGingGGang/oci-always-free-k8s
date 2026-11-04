@@ -10,6 +10,8 @@ Istio 설치 *전* 에 NLB annotation 자체의 동작을 격리해서 확인하
 - NSG / Security List 가 80 포트를 허용하는지
 - backend pod 까지 트래픽이 도달하는지
 
+모든 명령은 `kubernetes/test/networking` 디렉터리에서 실행합니다.
+
 ## 1. 전제 조건
 
 - OKE 클러스터 도달 가능 (`kubectl get nodes` OK)
@@ -30,7 +32,7 @@ service/nlb-smoketest created
 
 1. pod Running 확인.
 
-   `kubectl get pod -l app.kubernetes.io/name=nlb-smoketest`
+   `kubectl -n default get pod -l app.kubernetes.io/name=nlb-smoketest`
 
    ```bash
    NAME                             READY   STATUS    RESTARTS   AGE
@@ -39,7 +41,7 @@ service/nlb-smoketest created
 
 2. NLB 프로비저닝 (1-2분 소요). `EXTERNAL-IP` 컬럼에 public IP 떠야 함.
 
-   `kubectl get svc nlb-smoketest -w`
+   `kubectl -n default get svc nlb-smoketest -w`
 
    ```bash
    NAME            TYPE           CLUSTER-IP      EXTERNAL-IP       PORT(S)        AGE
@@ -49,7 +51,7 @@ service/nlb-smoketest created
 
 3. HTTP 응답 확인 (200 OK + nginx welcome 페이지). 핵심은 status code 200, 응답 body 는 nginx 기본 페이지.
 
-   `NLB_IP=$(kubectl get svc nlb-smoketest -o jsonpath='{.status.loadBalancer.ingress[0].ip}')`
+   `NLB_IP=$(kubectl -n default get svc nlb-smoketest -o jsonpath='{.status.loadBalancer.ingress[0].ip}')`
 
    `curl -v http://$NLB_IP/`
 
@@ -75,7 +77,7 @@ service/nlb-smoketest created
 | `oci-network-load-balancer-shape: flexible` | ✅ | ✅ |
 | `oci-network-load-balancer-is-preserve-source: true` | ❌ | ✅ |
 
-**`preserve-source` 제외 사유**: 이 옵션은 NLB → backend 구간에 PROXY protocol 을 enable. 일반 webserver (nginx, http-echo 등) 는 PROXY protocol parser 가 기본 없음 → request 가 mangled 됨. 본 smoketest 는 NLB 프로비저닝 + L4 전달까지만 확인하고, PROXY protocol 동작 검증은 Istio envoy 가 backend 가 되는 시점에 envoy 가 처리.
+본 smoketest 는 `preserve-source` 없이 NLB 프로비저닝과 전달을 확인한다. 이 설정은 클라이언트 IP 보존에 관한 것이며 PROXY protocol 과는 별개다. 자세한 내용은 [OCI NLB 문서](https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contengcreatingnetworkloadbalancers.htm) 참조.
 
 ### backend 이미지
 
@@ -91,10 +93,9 @@ service/nlb-smoketest created
 
 | 증상 | 원인 후보 |
 |------|-----------|
-| `EXTERNAL-IP` 가 `<pending>` 으로 멈춤 | CCM 이 NLB 생성 못 함. `kubectl describe svc nlb-smoketest` 의 Events 확인. 흔한 원인: subnet/CCM 권한 부족, NSG 미생성, IAM policy 부족 |
-| `EXTERNAL-IP` 떴는데 curl timeout | NSG/SecList 가 80 포트 ingress 막힘. terraform `nsg_public_id` 의 ingress rule 확인 |
-| `Connection refused` | backend pod 가 unhealthy. `kubectl logs -l app.kubernetes.io/name=nlb-smoketest` |
-| 응답이 깨져서 옴 | preserve-source 켠 채로 PROXY protocol 미지원 backend. 본 smoketest 에는 해당 없음 |
+| `EXTERNAL-IP` 가 `<pending>` 으로 멈춤 | CCM 이 NLB 생성 못 함. `kubectl -n default describe svc nlb-smoketest` 의 Events 확인. 흔한 원인: subnet/CCM 권한 부족, NSG 미생성, IAM policy 부족 |
+| `EXTERNAL-IP` 떴는데 curl timeout | NSG/SecList 가 80 포트 ingress 막힘. NLB 및 worker에 적용된 Security List / NSG 규칙 확인 |
+| `Connection refused` | backend pod 가 unhealthy. `kubectl -n default logs -l app.kubernetes.io/name=nlb-smoketest` |
 | pod 가 `ImageInspectError` / `ErrImagePull` | 이미지가 amd64-only manifest. OCI A1 (ARM64) 노드에서 platform mismatch. multi-arch 이미지로 교체 필요. `kubectl get nodes -o jsonpath='{.items[*].status.nodeInfo.architecture}'` 로 노드 아키텍처 확인 |
 | `short name mode is enforcing ... returns ambiguous list` | OKE containerd 가 short image name 거부. registry prefix 명시 (`docker.io/<org>/<image>`, `ghcr.io/<org>/<image>` 등) |
 

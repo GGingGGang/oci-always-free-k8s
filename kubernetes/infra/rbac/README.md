@@ -13,7 +13,7 @@ kubernetes/
 
 ArgoCD / Prometheus(kube-prometheus-stack)는 아직 전용 `rbac.yaml`이 없음 — chart 가 생성하는 기본 ClusterRole/ClusterRoleBinding 을 그대로 사용 중. 커스텀 RBAC 로 override 하게 되면 그 시점에 `platform/<comp>/rbac.yaml` 신설 + 본 표에 행 추가.
 
-분리 이유: chicken-egg 회피. 적용 대상 SA가 *존재하는 시점*에 RoleBinding을 함께 적용해야 *살아있는 RBAC*. 본 폴더의 설계가 *없는 SA에 대한 권한 설계*가 되면 종이호랑이.
+컴포넌트별 권한을 해당 컴포넌트와 함께 관리한다. Jenkins는 별도 Application의 sync wave 3에서 SA와 RBAC를 적용하고 chart는 wave 4에서 설치한다.
 
 ## 1. 전제 조건
 
@@ -28,8 +28,8 @@ ArgoCD / Prometheus(kube-prometheus-stack)는 아직 전용 `rbac.yaml`이 없�
 | 컴포넌트 | SA | 권한 scope | Kind | 위치 |
 |---------|-------|----------|------|------|
 | Jenkins controller | `cicd/jenkins` | `cicd` NS Pod/configmap/secret(read)/events (agent 관리) | Role + RoleBinding | `platform/jenkins/rbac.yaml` |
-| Jenkins → build | `cicd/jenkins` | `build` NS Pod CRUD (Kaniko 빌드 Pod 관리, cross-NS) | Role + RoleBinding | `platform/jenkins/rbac.yaml` |
-| Kaniko 빌드 | `build/kaniko-builder` | 권한 0건 (`automountServiceAccountToken: false`). Pod 신원 전용 | SA only | `platform/jenkins/rbac.yaml` |
+| Jenkins → build | `cicd/jenkins` | `build` NS Pod 및 pods/exec·pods/log create/delete/get/list/patch/update/watch, events watch (cross-NS) | Role + RoleBinding | `platform/jenkins/rbac.yaml` |
+| Kaniko 빌드 | `build/kaniko-builder` | 별도 RBAC grant 없음 (`automountServiceAccountToken: false`). Pod 신원 전용 | SA only | `platform/jenkins/rbac.yaml` |
 | Tailscale router | `tailscale/tailscale` | `tailscale` NS Secret create + `tailscale-state` get/update/patch (노드 state 영속) | Role + RoleBinding | `infra/tailscale/rbac.yaml` |
 | Loki | `monitoring/loki` | API 권한 추가 없음, token 자동 마운트 비활성 | SA only (chart) | `platform/monitoring/loki/values.yaml` |
 | Alloy | `monitoring/alloy` | `app/web/auth/core/batch/notify` Pod get/list/watch, pods/log get | Role + RoleBinding (chart override) | `platform/monitoring/alloy/values.yaml` |
@@ -56,7 +56,7 @@ kubectl get clusterrolebinding -o json | jq '.items[] | select(.roleRef.name=="c
 kubectl get sa -A -o json | jq '.items[] | {ns: .metadata.namespace, name: .metadata.name, automount: .automountServiceAccountToken}'
 ```
 
-cluster-admin 결과는 system 컴포넌트 (`system:masters`, `system:kube-controller-manager` 등)만 나와야 정상. 사용자 정의 SA가 있으면 *사고*.
+출력은 `cluster-admin`에 직접 연결된 binding만 보여 준다. 사용자 정의 SA가 있는지 검토하고, 다른 Role을 통한 동등 권한도 별도로 확인한다.
 
 ## 4. 결정
 
@@ -76,10 +76,9 @@ RoleBinding/ClusterRoleBinding은 *바인딩 대상 Role과 같은 이름*. 추�
 
 기본 원칙: **Role first, ClusterRole only when necessary**.
 
-ClusterRole이 *반드시 필요한* 경우:
-1. cluster-scope 리소스 접근 (`Node`, `PersistentVolume`, `ClusterIssuer`, `ClusterRole` 자체 등)
-2. 다중 NS에 동일 권한 부여 (이때도 *ClusterRole + 다중 RoleBinding* 패턴이 *ClusterRoleBinding* 보다 안전 — NS별로 명시적 grant)
-3. CRD watch (`apiGroups`이 default API group 외부)
+ClusterRole은 cluster-scope 리소스 접근 (`Node`, `PersistentVolume`, `ClusterIssuer`, `ClusterRole` 자체 등)에 필요하다. 다중 NS에서 동일 권한을 재사용할 때도 ClusterRole + 다중 RoleBinding으로 NS별 grant가 가능하다.
+
+특정 namespace의 CRD watch는 해당 API group을 명시한 Role로도 가능하다.
 
 ClusterRoleBinding을 *반드시 피해야* 하는 경우:
 - 단일 NS 한정 권한 → Role + RoleBinding
@@ -106,11 +105,11 @@ rules:
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get"]
     resourceNames: ["jenkins-admin"]   # 가능하면 특정 Secret 명시
 ```
 
-`resourceNames` 로 특정 Secret만 grant 가능. 사용 권장.
+`resourceNames` 로 특정 Secret만 grant 가능. `list`/`watch`에 이름을 제한하면 클라이언트도 일치하는 `metadata.name` field selector를 지정해야 한다. 일반적인 Pod의 Secret 주입에는 애플리케이션 SA의 Secret 읽기 권한이 필요하지 않다.
 
 ### cluster-admin 금지 원칙
 
@@ -197,7 +196,7 @@ ArgoCD/Prometheus 처럼 chart 가 default RBAC 를 생성하는 컴포넌트는
 
 ### CRD 권한
 
-CRD를 watch하려면 *해당 CRD의 apiGroup*을 ClusterRole rules에 명시:
+CRD를 watch하려면 *해당 CRD의 apiGroup*을 Role 또는 ClusterRole rules에 명시:
 
 ```yaml
 # Prometheus가 ServiceMonitor 발견하려면
@@ -207,7 +206,7 @@ rules:
     verbs: ["get", "list", "watch"]
 ```
 
-CRD 새로 도입 시 *기존 SA의 ClusterRole에 apiGroup 추가* 필요. CRD 설치 ≠ 자동 권한 부여.
+CRD 새로 도입 시 필요한 범위의 Role 또는 ClusterRole에 권한을 추가한다. CRD 설치 ≠ 자동 권한 부여.
 
 ### 다른 컴포넌트 SA에 grant 금지
 

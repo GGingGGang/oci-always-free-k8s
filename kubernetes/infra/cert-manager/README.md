@@ -9,7 +9,7 @@ Gateway API listener에 박을 TLS 인증서를 Let's Encrypt에서 자동 발�
 
 ## 1. 전제 조건
 
-- `cert-manager` 네임스페이스 존재 (`../namespaces/namespaces.yaml`)
+- `cert-manager`와 `istio-system` 네임스페이스 존재 (`../namespaces/namespaces.yaml`)
 - Gateway API CRD 설치 완료 (`../gateway-api/`)
 - Helm 3.6+
 - 도메인 zone이 Cloudflare에서 관리됨
@@ -17,9 +17,11 @@ Gateway API listener에 박을 TLS 인증서를 Let's Encrypt에서 자동 발�
   - Permissions: `Zone : DNS : Edit` + `Zone : Zone : Read`
   - Zone Resources: `Include : Specific zone : ggang.cloud`
   - external-dns용 token과 **분리해서 발급** (사고 시 폭발 반경 최소화)
-- 권장 버전: cert-manager chart `~1.18.0`
+- Argo CD에 고정된 cert-manager chart `v1.18.6` (`../../platform/argocd/apps/cert-manager.yaml`)
 
 ## 2. 설치
+
+수동 부트스트랩 명령은 저장소의 `kubernetes/infra/cert-manager` 디렉터리에서 실행한다. Argo CD 운영 시 Secret을 먼저 직접 생성하고 `cert-manager` Application을 sync한 뒤 준비되면 `cert-manager-resources`를 sync한다 (각 sync wave 1, 3). 기존 Helm release에 다시 `helm install`하지 않는다.
 
 ```bash
 kubectl create secret generic cloudflare-api-token \
@@ -31,7 +33,7 @@ helm repo update
 
 helm install cert-manager jetstack/cert-manager \
   -n cert-manager \
-  --version "~1.18.0" \
+  --version v1.18.6 \
   -f values.yaml \
   --wait
 
@@ -90,7 +92,7 @@ HTTP-01 비채택 사유:
 - 도메인 NS가 Cloudflare에 있는 한 *호환성 측면 의존*은 동일. HTTP-01로 가도 lock-in 감소 효과 없음
 
 DNS-01 채택 결과:
-- 와일드카드 `*.ggang.cloud` 1장으로 모든 subdomain 커버
+- 와일드카드 `*.ggang.cloud` 1장으로 한 단계 하위 subdomain 커버
 - Cloudflare API 의존은 ClusterIssuer 한 장에 응축 (provider 교체 시 solvers 블록만 수정, 인증서 재발급 불필요)
 - Gateway 80을 cert-manager가 건드리지 않음 → listener 책임 경계 명확
 
@@ -108,7 +110,7 @@ RSA-2048 대신 ECDSA. 동일 보안 강도에서 키/서명 크기 ↓, TLS han
 
 ### staging + prod ClusterIssuer 둘 다 생성
 
-prod LE는 발급 실패 시 rate-limit(중복 인증서 5/주, pending order 등) 빠르게 소진. Certificate 작성·디버깅 단계에서는 `letsencrypt-staging`으로 검증 → 신뢰 체인 확인 후 `letsencrypt-prod`로 전환.
+현재 `certificate.yaml`은 `letsencrypt-prod`를 참조한다. 테스트 시 `issuerRef.name`을 `letsencrypt-staging`으로 바꿔 DNS 검증과 발급을 확인한 뒤 `letsencrypt-prod`로 되돌린다. staging 인증서는 일반 브라우저에서 신뢰되지 않는다. Argo CD가 관리 중이면 Git에 변경을 반영하고 sync한다.
 
 ### DNS-01 recursive nameserver 명시
 
@@ -122,7 +124,7 @@ ClusterIssuer가 `cert-manager` 네임스페이스의 Secret만 참조 가능 (c
 
 ### Gateway listener 연결
 
-본 매니페스트는 cert-manager 설치 + Certificate 발급까지. `istio-system/public-gateway`의 HTTPS 443 listener(`https-apex`/`https-wildcard`, `certificateRefs: public-wildcard-tls`) + HTTP→HTTPS redirect는 `../istio/gateway.yaml` 에서 연결됨(적용 완료).
+본 매니페스트는 cert-manager 설치 + Certificate 발급까지. `../istio/gateway.yaml`의 `istio-system/public-gateway` HTTPS listener는 `public-wildcard-tls`를 참조하며 HTTP→HTTPS redirect는 `../istio/http-redirect.yaml`에 선언된다.
 
 ### Token 회전
 
@@ -136,15 +138,15 @@ cert-manager는 Secret을 매 reconcile마다 다시 읽으므로 controller res
 
 ### LE rate-limit 회피
 
-prod issuer로 처음 발급 시도 전에 staging으로 1차 검증. prod 발급 실패가 누적되면 동일 도메인 7일 lock-out 위험.
+prod issuer로 처음 발급 시도 전에 staging으로 1차 검증. 발급 제한과 인증 실패 제한은 서로 다르므로 [LE rate limits](https://letsencrypt.org/docs/rate-limits/)를 확인한다.
 
 ### 갱신 타이밍
 
-`renewBefore: 360h` (15일). LE 표준 만료 90일 기준 75% 시점에 자동 갱신 시도. 실패 시 cert-manager가 backoff 재시도. Alertmanager에서 `certmanager_certificate_expiration_timestamp_seconds`를 임계치(7일 등) 감시 권장 (observability 도입 시).
+`renewBefore: 360h` (15일). 실제 인증서 만료 15일 전에 자동 갱신 시도 (유효기간이 90일이면 약 83% 시점). 실패 시 cert-manager가 backoff 재시도. `values.yaml`은 Prometheus metrics를 비활성화하므로 해당 메트릭 감시에는 별도 설정이 필요하다.
 
 ### CRD upgrade
 
-`crds.keep: true`. helm uninstall 시에도 CRD 보존 → 운영 중 Certificate 객체가 의도치 않게 삭제되는 사고 방지. major upgrade 시 CRD는 `kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/vX.Y.Z/cert-manager.crds.yaml` 로 수동 갱신.
+`crds.keep: true`. helm uninstall 시에도 CRD 보존 → 운영 중 Certificate 객체가 의도치 않게 삭제되는 사고 방지. `crds.enabled: true`로 chart가 CRD를 관리한다. 업그레이드 시 대상 버전의 릴리스 노트와 [업그레이드 안내](https://cert-manager.io/docs/installation/upgrade/)를 확인하고 chart와 함께 CRD를 갱신한다.
 
 ### Secret 관리 — Vault 이관 예정
 
